@@ -5,13 +5,13 @@ class FHIRClient:
     def __init__(self):
         self.access_token = ""
         self.create_access_token()
-        print(self.search_snomed("195967001", ""))
+        # print(self.search_snomed("195967001", ""))
         # print(self.map_snomed_to_icd10("195967001"))
 
     def search_snomed(self, ecl: str, term: str, count: int = 20):
         # Search SNOMED CT using an Implicit ValueSet with a SNOMED Query (ECL) see: https://snomed.org/ecl
         url = f"{settings.fhir_api_url}/ValueSet/$expand?url=http://snomed.info/sct?fhir_vs=ecl/{ecl}&filter={term}"
-        print(f'Expand: {url}')
+        print(f'Expanding ValueSet: {url}')
         response = requests.get(url, headers={"Authorization": f"Bearer {self.access_token}"})
         return response.json()
 
