@@ -4,9 +4,10 @@ import Form from 'react-bootstrap/Form';
 
 const SnomedSearch = (args) => {
 
+  const [code, setCode] = useState([]);
+  const [mustHave, setMustHave] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [options, setOptions] = useState([]);
-  const [code, setCode] = useState([]);
   const [includedCodeCount, setincludedCodeCount] = useState("");
 
   const handleSearch = (query) => {
@@ -24,6 +25,12 @@ const SnomedSearch = (args) => {
 
   const selectCode = (selected) => {
     setCode(selected);
+    if (args.onSelect) {
+      args.onSelect({
+          code: selected,
+          mustHave: mustHave
+      });
+    }
     if (selected.length === 1) {
       setincludedCodeCount("");
       fetch(`/api/snomed/count-descendants-and-self?code=${selected[0].code}`)
@@ -31,16 +38,28 @@ const SnomedSearch = (args) => {
           .then(data => {
             setincludedCodeCount(data.expansion.total || "");
           });
+      console.log(getSelection())
     }
   };
+
+  const changeMustHave = (mustHave) => {
+    setMustHave(mustHave)
+    if (args.onSelect) {
+      args.onSelect({
+          code: code,
+          mustHave: mustHave
+      });
+    }
+  }
 
   return (
   <div>
     <Form.Group className="mb-3">
       <Form.Label>{args.label}</Form.Label>
-      <Form.Check type="radio" id="must_have_{label}" label="Must have" checked={true} />
-      <Form.Check type="radio" id="must_have_{label}" label="Must not have" checked={false} />
+      <Form.Check type="radio" id={'must_have_' + args.label} label="Must have" checked={mustHave} onChange={() => changeMustHave(true)} />
+      <Form.Check type="radio" id={'must_not_have_' + args.label} label="Must not have" checked={!mustHave} onChange={() => changeMustHave(false)} />
       <AsyncTypeahead
+        id={args.label}
         labelKey="display"
         options={options}
         isLoading={isLoading}

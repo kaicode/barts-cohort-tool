@@ -3,10 +3,12 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import os
 from app.routes import snomed_route
+from app.routes import cohort_route
 
 app = FastAPI()
 
 app.include_router(snomed_route.router, prefix="/api")
+app.include_router(cohort_route.router, prefix="/api")
 
 # Serve React static files
 frontend_build_path = os.path.join(os.path.dirname(__file__), "../frontend/build")
