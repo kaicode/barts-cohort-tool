@@ -141,9 +141,9 @@ function App() {
             label=""
             target_code="404684003"
             onSelect={(snomedSelection) => {
-              // Prevent duplicates
+              const newCode = snomedSelection.code.code || snomedSelection.code[0]?.code;
               setMustHaveFindings((prev) =>
-                prev.find((item) => item.code === snomedSelection.code)
+                prev.some(item => (item.code.code || item.code[0]?.code) === newCode)
                   ? prev
                   : [...prev, snomedSelection]
               );
@@ -151,33 +151,35 @@ function App() {
           />
 
           {mustHaveFindings.length > 0 && (
-            <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
-              {mustHaveFindings.map((item, index) => {
-                const displayValue = item.code && item.code[0] ? item.code[0].display : null;
-                // Only render the list item if displayValue is not empty or null
-                if (displayValue) {
-                  return (
-                    <li key={index} style={{ marginBottom: "5px" }}>
-                      {displayValue}{" "}
-                      <Button
-                        variant="outline-danger"
-                        size="sm"
-                        onClick={() =>
-                          setMustHaveFindings((prev) =>
-                            prev.filter((_, i) => i !== index)
-                          )
-                        }
-                        style={{ marginLeft: "10px", padding: "0 6px" }}
-                      >
-                        ?
-                      </Button>
-                    </li>
-                  );
-                }
-                return null; // Don't render anything if displayValue is empty or null
-              })}
-            </ul>
-          )}
+              <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
+                {mustHaveFindings.map((item, index) => {
+                  const displayValue = item.code?.display || item.code?.[0]?.display;
+                  const count = item.count || 1;
+                  const uniqueId = item.code?.code || item.code?.[0]?.code;
+            
+                  if (displayValue && uniqueId) {
+                    return (
+                      <li key={uniqueId} style={{ marginBottom: "5px" }}>
+                        {`${displayValue} (Included ${count} code${count !== 1 ? 's' : ''})`}
+                        <Button
+                          variant="outline-danger"
+                          size="sm"
+                          onClick={() =>
+                            setMustHaveFindings(prev =>
+                              prev.filter((_, i) => i !== index)
+                            )
+                          }
+                          style={{ marginLeft: "10px", padding: "0 6px" }}
+                        >
+                          ❌
+                        </Button>
+                      </li>
+                    );
+                  }
+                  return null;
+                })}
+              </ul>
+            )}
 
         </Form.Group>
 
@@ -187,9 +189,9 @@ function App() {
             label=""
             target_code="404684003"
             onSelect={(snomedSelection) => {
-              // Prevent duplicates
+              const newCode = snomedSelection.code.code || snomedSelection.code[0]?.code;
               setMustNotHaveFindings((prev) =>
-                prev.find((item) => item.code === snomedSelection.code)
+                prev.some(item => (item.code.code || item.code[0]?.code) === newCode)
                   ? prev
                   : [...prev, snomedSelection]
               );
@@ -199,31 +201,34 @@ function App() {
           {mustNotHaveFindings.length > 0 && (
               <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
                 {mustNotHaveFindings.map((item, index) => {
-                  const displayValue = item.code && item.code[0] ? item.code[0].display : null;
-                  // Only render the list item if displayValue is not empty or null
-                  if (displayValue) {
+                  const displayValue = item.code?.display || item.code?.[0]?.display;
+                  const count = item.count || 1;
+                  const uniqueId = item.code?.code || item.code?.[0]?.code;
+            
+                  if (displayValue && uniqueId) {
                     return (
-                      <li key={index} style={{ marginBottom: "5px" }}>
-                        {displayValue}{" "}
+                      <li key={uniqueId} style={{ marginBottom: "5px" }}>
+                        {`${displayValue} (Included ${count} code${count !== 1 ? 's' : ''})`}
                         <Button
                           variant="outline-danger"
                           size="sm"
                           onClick={() =>
-                            setMustNotHaveFindings((prev) =>
+                            setMustNotHaveFindings(prev =>
                               prev.filter((_, i) => i !== index)
                             )
                           }
                           style={{ marginLeft: "10px", padding: "0 6px" }}
                         >
-                          ?
+                          ❌
                         </Button>
                       </li>
                     );
                   }
-                  return null; // Don't render anything if displayValue is empty or null
+                  return null;
                 })}
               </ul>
-            )}  
+            )}
+
           
         </Form.Group>
 
