@@ -20,8 +20,8 @@ const ethnicityOptions = [
 ];
 
 const genderOptions = [
-  { code: "1", label: "Male (including trans man)" },
-  { code: "2", label: "Female (including trans woman)" },
+  { code: "1", label: "Male" },
+  { code: "2", label: "Female" },
   { code: "3", label: "Non-binary" },
   { code: "4", label: "Other (not listed)" },
   { code: "X", label: "Not Known (not recorded)" },

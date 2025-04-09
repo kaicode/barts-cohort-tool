@@ -21,20 +21,22 @@ function App() {
   const [mustHaveFindings, setMustHaveFindings] = useState([]);
   const [mustNotHaveFindings, setMustNotHaveFindings] = useState([]);
 
-  const handleEthnicityChange = (code) => {
-    setEthnicity((prev) =>
-      prev.includes(code)
-        ? prev.filter((item) => item !== code)
-        : [...prev, code]
-    );
+  const handleEthnicityChange = (code, label) => {
+    setEthnicity((prev) => {
+      const ethnicityItem = { code, display: label };
+      return prev.some(item => item.code === code)
+        ? prev.filter(item => item.code !== code)
+        : [...prev, ethnicityItem];
+    });
   };
 
-  const handleGenderChange = (code) => {
-    setSelectedGenders((prev) =>
-      prev.includes(code)
-        ? prev.filter((item) => item !== code)
-        : [...prev, code]
-    );
+  const handleGenderChange = (code, label) => {
+    setSelectedGenders((prev) => {
+      const genderItem = { code, display: label };
+      return prev.some(item => item.code === code)
+        ? prev.filter(item => item.code !== code)
+        : [...prev, genderItem];
+    });
   };
 
   const handleSubmit = async (event) => {
@@ -87,8 +89,8 @@ function App() {
               key={code}
               type="checkbox"
               label={label}
-              checked={selectedGenders.includes(code)}
-              onChange={() => handleGenderChange(code)}
+              checked={selectedGenders.some(item => item.code === code)}
+              onChange={() => handleGenderChange(code, label)}
             />
           ))}
           <Form.Text className="text-muted">Leave blank to include all genders.</Form.Text>
@@ -111,8 +113,8 @@ function App() {
               key={code}
               type="checkbox"
               label={label}
-              checked={ethnicity.includes(code)}
-              onChange={() => handleEthnicityChange(code)}
+              checked={ethnicity.some(item => item.code === code)}
+              onChange={() => handleEthnicityChange(code, label)}
             />
           ))}
           <Form.Text className="text-muted">Leave blank to include all ethnicities.</Form.Text>
@@ -151,35 +153,35 @@ function App() {
           />
 
           {mustHaveFindings.length > 0 && (
-              <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
-                {mustHaveFindings.map((item, index) => {
-                  const displayValue = item.code?.display || item.code?.[0]?.display;
-                  const count = item.count || 1;
-                  const uniqueId = item.code?.code || item.code?.[0]?.code;
-            
-                  if (displayValue && uniqueId) {
-                    return (
-                      <li key={uniqueId} style={{ marginBottom: "5px" }}>
-                        {`${displayValue} (Included ${count} code${count !== 1 ? 's' : ''})`}
-                        <Button
-                          variant="outline-danger"
-                          size="sm"
-                          onClick={() =>
-                            setMustHaveFindings(prev =>
-                              prev.filter((_, i) => i !== index)
-                            )
-                          }
-                          style={{ marginLeft: "10px", padding: "0 6px" }}
-                        >
-                          ❌
-                        </Button>
-                      </li>
-                    );
-                  }
-                  return null;
-                })}
-              </ul>
-            )}
+            <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
+              {mustHaveFindings.map((item, index) => {
+                const displayValue = item.code?.display || item.code?.[0]?.display;
+                const count = item.count || 1;
+                const uniqueId = item.code?.code || item.code?.[0]?.code;
+
+                if (displayValue && uniqueId) {
+                  return (
+                    <li key={uniqueId} style={{ marginBottom: "5px" }}>
+                      {`${displayValue} (Included ${count} code${count !== 1 ? 's' : ''})`}
+                      <Button
+                        variant="outline-danger"
+                        size="sm"
+                        onClick={() =>
+                          setMustHaveFindings(prev =>
+                            prev.filter((_, i) => i !== index)
+                          )
+                        }
+                        style={{ marginLeft: "10px", padding: "0 6px" }}
+                      >
+                        ❌
+                      </Button>
+                    </li>
+                  );
+                }
+                return null;
+              })}
+            </ul>
+          )}
 
         </Form.Group>
 
@@ -199,37 +201,36 @@ function App() {
           />
 
           {mustNotHaveFindings.length > 0 && (
-              <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
-                {mustNotHaveFindings.map((item, index) => {
-                  const displayValue = item.code?.display || item.code?.[0]?.display;
-                  const count = item.count || 1;
-                  const uniqueId = item.code?.code || item.code?.[0]?.code;
-            
-                  if (displayValue && uniqueId) {
-                    return (
-                      <li key={uniqueId} style={{ marginBottom: "5px" }}>
-                        {`${displayValue} (Included ${count} code${count !== 1 ? 's' : ''})`}
-                        <Button
-                          variant="outline-danger"
-                          size="sm"
-                          onClick={() =>
-                            setMustNotHaveFindings(prev =>
-                              prev.filter((_, i) => i !== index)
-                            )
-                          }
-                          style={{ marginLeft: "10px", padding: "0 6px" }}
-                        >
-                          ❌
-                        </Button>
-                      </li>
-                    );
-                  }
-                  return null;
-                })}
-              </ul>
-            )}
+            <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
+              {mustNotHaveFindings.map((item, index) => {
+                const displayValue = item.code?.display || item.code?.[0]?.display;
+                const count = item.count || 1;
+                const uniqueId = item.code?.code || item.code?.[0]?.code;
 
-          
+                if (displayValue && uniqueId) {
+                  return (
+                    <li key={uniqueId} style={{ marginBottom: "5px" }}>
+                      {`${displayValue} (Included ${count} code${count !== 1 ? 's' : ''})`}
+                      <Button
+                        variant="outline-danger"
+                        size="sm"
+                        onClick={() =>
+                          setMustNotHaveFindings(prev =>
+                            prev.filter((_, i) => i !== index)
+                          )
+                        }
+                        style={{ marginLeft: "10px", padding: "0 6px" }}
+                      >
+                        ❌
+                      </Button>
+                    </li>
+                  );
+                }
+                return null;
+              })}
+            </ul>
+          )}
+
         </Form.Group>
 
         <Button variant="primary" type="submit">Submit</Button>
@@ -243,7 +244,7 @@ function App() {
           selectedGenders.length === 0
             ? "All"
             : selectedGenders
-                .map(code => genderOptions.find(g => g.code === code)?.label || code)
+                .map(item => `${item.display}`)
                 .join(', ')
         }</li>
         <li><strong>Age Range:</strong> {minAge} - {maxAge}</li>
@@ -251,7 +252,7 @@ function App() {
           ethnicity.length === 0
             ? "All"
             : ethnicity
-                .map(code => ethnicityOptions.find(e => e.code === code)?.label || code)
+                .map(item => `${item.display}`)
                 .join(', ')
         }</li>
         <li><strong>Time Range:</strong> {
@@ -263,17 +264,17 @@ function App() {
           mustHaveFindings.length === 0
             ? "None"
             : mustHaveFindings
-                .map(item => item.code && item.code[0] ? item.code[0].display : null)  // Extract the 'display' value
-                .filter(displayValue => displayValue)  // Filter out null/empty display values
-                .join(', ') || "None"  // Show "None" if no valid display values
-          }</li>
+                .map(item => item.code && item.code[0] ? item.code[0].display : null)
+                .filter(displayValue => displayValue)
+                .join(', ') || "None"
+        }</li>
         <li><strong>Must Not Have Findings/Disorders:</strong> {
           mustNotHaveFindings.length === 0
             ? "None"
             : mustNotHaveFindings
-                .map(item => item.code && item.code[0] ? item.code[0].display : null)  // Extract the 'display' value
-                .filter(displayValue => displayValue)  // Filter out null/empty display values
-                .join(', ') || "None"  // Show "None" if no valid display values
+                .map(item => item.code && item.code[0] ? item.code[0].display : null)
+                .filter(displayValue => displayValue)
+                .join(', ') || "None"
         }</li>
       </ul>
     </div>
