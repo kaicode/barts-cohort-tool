@@ -16,6 +16,7 @@ This project has two parts:
 For the development setup:
 - create a terminal for the frontend
 - cd to the frontend directory
+- run `npm install` to setup the javascript project
 - run `npm start` for automatic reloading react app on http://localhost:3000
 - create a second terminal for the backend
 - run `uvicorn app.main:app --reload` for automatic reloading backend on http://localhost:8000
