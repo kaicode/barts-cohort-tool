@@ -12,7 +12,7 @@ class FHIRClient:
     def search_snomed(self, ecl: str, term: str, count: int = 20):
         self.ensure_valid_token()
         url = f"{settings.fhir_api_url}/ValueSet/$expand?url=http://snomed.info/sct?fhir_vs=ecl/{ecl}&filter={term}"
-        print(f'Expanding ValueSet: {url}')
+        # print(f'Expanding ValueSet: {url}')
         response = requests.get(url, headers={"Authorization": f"Bearer {self.access_token}"})
         return response.json()
 
