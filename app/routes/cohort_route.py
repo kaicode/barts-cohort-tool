@@ -27,8 +27,16 @@ class CodeEntry(BaseModel):
     code: str
     display: Optional[str]
 
+class CodeDetail(BaseModel):
+    code: str
+    display: Optional[str]
+    count: Optional[int]
+
 class FindingItem(BaseModel):
     code: List[CodeEntry]
+    display: Optional[str]
+    count: Optional[int]
+    codesWithDetails: Optional[List[CodeDetail]]
 
 class TimeRange(BaseModel):
     start: Optional[str] = None
@@ -36,12 +44,12 @@ class TimeRange(BaseModel):
 
 class CohortDefinition(BaseModel):
     title: str
-    gender: Union[str, List[CodeEntry]]  # Updated to handle gender as list of CodeEntry
-    ethnicity: Union[str, List[CodeEntry]]  # Updated to handle ethnicity as list of CodeEntry
+    gender: Union[str, List[CodeEntry]]
     ageRange: AgeRange
-    timeRange: Optional[TimeRange] = None
-    mustHaveFindings: List[FindingItem]
-    mustNotHaveFindings: List[FindingItem]
+    ethnicity: Union[str, List[CodeEntry]]
+    timeRange: Optional[TimeRange]
+    mustHaveFindings: Optional[List[FindingItem]]
+    mustNotHaveFindings: Optional[List[FindingItem]]
 
 # Helper function to fetch SNOMED display name
 def get_snomed_display(code: str) -> str:
@@ -56,13 +64,19 @@ def get_snomed_display(code: str) -> str:
 
 @router.post("/cohort/select")
 async def run_select(cohort_definition: CohortDefinition):
+    
+    # Extract display values
+    displays_gender = [entry.display for entry in cohort_definition.gender]
+    displays_ethnicity = [entry.display for entry in cohort_definition.ethnicity]
+
+    # Extract age and date range
     minAge = cohort_definition.ageRange.min
     maxAge = cohort_definition.ageRange.max
-    start = cohort_definition.timeRange.start if cohort_definition.timeRange else None
-    end = cohort_definition.timeRange.end if cohort_definition.timeRange else None
+    start_date = cohort_definition.timeRange.start if cohort_definition.timeRange else None
+    end_date = cohort_definition.timeRange.end if cohort_definition.timeRange else None
     
-    print('mustHaveFindings')
-    print(cohort_definition)
+    # print('mustHaveFindings#####################################################')
+    # print(cohort_definition.mustHaveFindings)
     
     # Retrieve Gender
     gender = cohort_definition.gender  # This could be a string or a list of CodeEntry
@@ -78,28 +92,29 @@ async def run_select(cohort_definition: CohortDefinition):
     elif isinstance(ethnicity, list):
         ethnicity_list = [{"code": item.code, "display": item.display} for item in ethnicity]
 
-    # Expand MUST-HAVE codes
-    must_have_codes = []
-    for item in cohort_definition.mustHaveFindings:
-        for code_entry in item.code:
-            if code_entry.code:
-                # Create a dictionary with 'code' and 'display'
-                must_have_codes.append({
-                    "code": code_entry.code,
-                    "display": code_entry.display or 'Unknown'  # Default to 'Unknown' if no display is provided
-                })
-
-    # Expand MUST-NOT-HAVE codes
-    must_not_have_codes = []
-    for item in cohort_definition.mustNotHaveFindings:
-        for code_entry in item.code:
-            if code_entry.code:
-                # Create a dictionary with 'code' and 'display'
-                must_not_have_codes.append({
-                    "code": code_entry.code,
-                    "display": code_entry.display or 'Unknown'  # Default to 'Unknown' if no display is provided
-                })
-
+    # Expand MUST-HAVE codes from codesWithDetails
+    musthaveSnomedCodes = []
+    if cohort_definition.mustHaveFindings:
+        for item in cohort_definition.mustHaveFindings:
+            if item.codesWithDetails:
+                for detail in item.codesWithDetails:
+                    if detail.code:
+                        musthaveSnomedCodes.append(
+                            detail.code
+                        )
+    
+    # Expand MUST-NOT-HAVE codes from codesWithDetails
+    mustNOThaveSnomedCodes = []
+    if cohort_definition.mustNotHaveFindings:
+        for item in cohort_definition.mustNotHaveFindings:
+            if item.codesWithDetails:
+                for detail in item.codesWithDetails:
+                    if detail.code:
+                        mustNOThaveSnomedCodes.append(
+                            detail.code
+                        )
+    
+    """
     # Logging all parameters for now
     print("\n--- Cohort Summary ---")
     print("Title:", cohort_definition.title)
@@ -112,6 +127,7 @@ async def run_select(cohort_definition: CohortDefinition):
     # Format SNOMED codes for logging with display
     print("Must-have SNOMED codes:", must_have_codes)
     print("Must-not-have SNOMED codes:", must_not_have_codes)
+    """
     
     """
     # Final response
@@ -127,20 +143,7 @@ async def run_select(cohort_definition: CohortDefinition):
     }
     """
     
-    # Extract display values
-    displays_gender = [entry.display for entry in cohort_definition.gender]
-    displays_ethnicity = [entry.display for entry in cohort_definition.ethnicity]
-
-    # Extract age and date range
-    minAge = cohort_definition.ageRange.min
-    maxAge = cohort_definition.ageRange.max
-    start_date = cohort_definition.timeRange.start
-    end_date = cohort_definition.timeRange.end
-
-    # Extract SNOMED codes (flatten if multiple entries per FindingItem)
-    musthaveSnomedCodes = [code_entry.code for item in cohort_definition.mustHaveFindings for code_entry in item.code]
-    mustNOThaveSnomedCodes = [code_entry.code for item in cohort_definition.mustNotHaveFindings for code_entry in item.code]
-
+    
     # Create SQL placeholders
     placeholders_gender = ', '.join(['?'] * len(displays_gender))
     placeholders_ethnicity = ', '.join(['?'] * len(displays_ethnicity))
@@ -164,6 +167,9 @@ async def run_select(cohort_definition: CohortDefinition):
         GROUP BY b.Gender, c.DiagCode, a.Adm_Dt, c.Diagnosis
     """
     
+    # print('query')
+    # print(query)
+    
     params = (
         *displays_gender,
         *displays_ethnicity,
@@ -174,6 +180,9 @@ async def run_select(cohort_definition: CohortDefinition):
         *musthaveSnomedCodes,
         *mustNOThaveSnomedCodes
     )
+    
+    # print('params')
+    # print(params)
     
     # Initialise df_results so it's available outside the `if`
     df_results = pd.DataFrame()
@@ -199,6 +208,3 @@ async def run_select(cohort_definition: CohortDefinition):
         # Close connections
         cursor.close()
         conn.close()
-        
-    
-    

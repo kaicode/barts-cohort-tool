@@ -41,6 +41,8 @@ function App() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    
+    console.log("🔍 mustHaveFindings on submit:", mustHaveFindings); // << add this line
 
     const cohortDefinition = {
       title,
@@ -144,16 +146,21 @@ function App() {
             target_code="404684003"
             onSelect={(snomedSelection) => {
               const newCode = snomedSelection.code.code || snomedSelection.code[0]?.code;
+              
+              // 🔍 Log all SNOMED codes with details
+              // console.log("snomedSelection:", snomedSelection.codesWithDetails);
+      
               setMustHaveFindings((prev) =>
                 prev.some(item => (item.code.code || item.code[0]?.code) === newCode)
                   ? prev
                   : [...prev, snomedSelection]
-              );
+              );        
             }}
           />
-
+          
           {mustHaveFindings.length > 0 && (
             <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
+            
               {mustHaveFindings.map((item, index) => {
                 const displayValue = item.code?.display || item.code?.[0]?.display;
                 const count = item.count || 1;
