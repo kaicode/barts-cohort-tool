@@ -64,10 +64,15 @@ def get_snomed_display(code: str) -> str:
 
 @router.post("/cohort/select")
 async def run_select(cohort_definition: CohortDefinition):
-    
+
+    displays_gender = []
     # Extract display values
-    displays_gender = [entry.display for entry in cohort_definition.gender]
-    displays_ethnicity = [entry.display for entry in cohort_definition.ethnicity]
+    if cohort_definition.gender != 'ALL':
+        displays_gender = [entry.display for entry in cohort_definition.gender]
+        
+    displays_ethnicity = []
+    if cohort_definition.ethnicity != 'ALL':
+        displays_ethnicity = [entry.display for entry in cohort_definition.ethnicity]
 
     # Extract age and date range
     minAge = cohort_definition.ageRange.min
@@ -121,12 +126,12 @@ async def run_select(cohort_definition: CohortDefinition):
     print("Gender:", gender_list)
     print("Ethnicity:", ethnicity_list)
     print("Age Range:", minAge, "-", maxAge)
-    print("Start date:", start)
-    print("End date:", end)
+    print("Start date:", start_date)
+    print("End date:", end_date)
     
     # Format SNOMED codes for logging with display
-    print("Must-have SNOMED codes:", must_have_codes)
-    print("Must-not-have SNOMED codes:", must_not_have_codes)
+    print("Must-have SNOMED codes:", musthaveSnomedCodes)
+    print("Must-not-have SNOMED codes:", mustNOThaveSnomedCodes)
     """
     
     """
@@ -144,46 +149,61 @@ async def run_select(cohort_definition: CohortDefinition):
     """
     
     
-    # Create SQL placeholders
-    placeholders_gender = ', '.join(['?'] * len(displays_gender))
-    placeholders_ethnicity = ', '.join(['?'] * len(displays_ethnicity))
-    placeholders_musthaveSnomedCodes = ', '.join(['?'] * len(musthaveSnomedCodes))
-    placeholders_mustNOThaveSnomedCodes = ', '.join(['?'] * len(mustNOThaveSnomedCodes))
-
-    # SQL Query
-    query = f"""
+    # Base SELECT and JOIN statements
+    base_query = """
         SELECT a.Adm_Dt, b.Gender, c.DiagCode, c.Diagnosis, COUNT(*) AS patient_count
         FROM [synth].[rde_cds_apc_PCT] a WITH(NOLOCK) 
         INNER JOIN [synth].[rde_patient_demographics_PCT] b WITH(NOLOCK) 
         ON a.PERSON_ID = b.PERSON_ID
         INNER JOIN [synth].[rde_pc_diagnosis_PCT] c WITH(NOLOCK)
         ON b.PERSON_ID = c.PERSON_ID
-        WHERE b.Gender IN ({placeholders_gender}) AND
-              b.Ethnicity IN ({placeholders_ethnicity}) AND
-              (YEAR(GETDATE()) - b.Year_of_Birth) BETWEEN ? AND ? AND
-              a.Adm_Dt >= ? AND a.Adm_Dt <= ? AND
-              c.DiagCode IN ({placeholders_musthaveSnomedCodes}) AND
-              c.DiagCode NOT IN ({placeholders_mustNOThaveSnomedCodes})
+    """
+    
+    # Build WHERE conditions and parameters
+    where_conditions = []
+    params = []
+    
+    if displays_gender:
+        placeholders_gender = ', '.join(['?'] * len(displays_gender))
+        where_conditions.append(f"b.Gender IN ({placeholders_gender})")
+        params.extend(displays_gender)
+    
+    if displays_ethnicity:
+        placeholders_ethnicity = ', '.join(['?'] * len(displays_ethnicity))
+        where_conditions.append(f"b.Ethnicity IN ({placeholders_ethnicity})")
+        params.extend(displays_ethnicity)
+    
+    # Age range condition (always included)
+    where_conditions.append("(YEAR(GETDATE()) - b.Year_of_Birth) BETWEEN ? AND ?")
+    params.extend([minAge, maxAge])
+    
+    # Admission date (only add if provided)
+    if start_date and end_date:
+        where_conditions.append("a.Adm_Dt >= ? AND a.Adm_Dt <= ?")
+        params.extend([start_date, end_date])
+    
+    if musthaveSnomedCodes:
+        placeholders_have = ', '.join(['?'] * len(musthaveSnomedCodes))
+        where_conditions.append(f"c.DiagCode IN ({placeholders_have})")
+        params.extend(musthaveSnomedCodes)
+    
+    if mustNOThaveSnomedCodes:
+        placeholders_nothave = ', '.join(['?'] * len(mustNOThaveSnomedCodes))
+        where_conditions.append(f"c.DiagCode NOT IN ({placeholders_nothave})")
+        params.extend(mustNOThaveSnomedCodes)
+    
+    # Combine everything into the final query
+    where_clause = " AND ".join(where_conditions)
+    final_query = f"""
+        {base_query}
+        WHERE {where_clause}
         GROUP BY b.Gender, c.DiagCode, a.Adm_Dt, c.Diagnosis
     """
     
-    # print('query')
-    # print(query)
-    
-    params = (
-        *displays_gender,
-        *displays_ethnicity,
-        minAge,
-        maxAge,
-        start_date,
-        end_date,
-        *musthaveSnomedCodes,
-        *mustNOThaveSnomedCodes
-    )
-    
-    # print('params')
+    # Print final query and parameters (for debugging)
+    # print(final_query)
     # print(params)
-    
+        
     # Initialise df_results so it's available outside the `if`
     df_results = pd.DataFrame()
 
@@ -191,7 +211,7 @@ async def run_select(cohort_definition: CohortDefinition):
     conn = get_db_connection()
     if conn:
         cursor = conn.cursor()
-        cursor.execute(query, params)
+        cursor.execute(final_query, params)
         
         # Get column names from cursor.description
         column_names = [column[0] for column in cursor.description]

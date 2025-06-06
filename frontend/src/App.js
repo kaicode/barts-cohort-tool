@@ -169,7 +169,15 @@ function App() {
                 if (displayValue && uniqueId) {
                   return (
                     <li key={uniqueId} style={{ marginBottom: "5px" }}>
-                      {`${displayValue} (Included ${count} code${count !== 1 ? 's' : ''})`}
+                        <a
+                          href={`https://termbrowser.nhs.uk/?perspective=full&conceptId1=${uniqueId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ textDecoration: "underline", color: "#007bff" }}
+                        >
+                          {displayValue}
+                        </a>{' '}
+                      {`(Included ${count} code${count !== 1 ? 's' : ''})`}
                       <Button
                         variant="outline-danger"
                         size="sm"
@@ -217,7 +225,15 @@ function App() {
                 if (displayValue && uniqueId) {
                   return (
                     <li key={uniqueId} style={{ marginBottom: "5px" }}>
-                      {`${displayValue} (Included ${count} code${count !== 1 ? 's' : ''})`}
+                        <a
+                          href={`https://termbrowser.nhs.uk/?perspective=full&conceptId1=${uniqueId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ textDecoration: "underline", color: "#007bff" }}
+                        >
+                          {displayValue}
+                        </a>{' '}
+                      {`(Included ${count} code${count !== 1 ? 's' : ''})`}
                       <Button
                         variant="outline-danger"
                         size="sm"
