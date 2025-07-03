@@ -64,6 +64,8 @@ def get_snomed_display(code: str) -> str:
 
 @router.post("/cohort/select")
 async def run_select(cohort_definition: CohortDefinition):
+    
+    # print(CohortDefinition)
 
     displays_gender = []
     # Extract display values

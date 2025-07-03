@@ -19,8 +19,8 @@ function App() {
   const [endDate, setEndDate] = useState("");
   const [mustHaveFindings, setMustHaveFindings] = useState([]);
   const [mustNotHaveFindings, setMustNotHaveFindings] = useState([]);
-  const [includeChildCodesHave, setIncludeChildCodesHave] = useState(true);
-  const [includeChildCodesNotHave, setIncludeChildCodesNotHave] = useState(true);
+  const [includeChildCodesHave, setIncludeChildCodesHave] = useState(false);
+  const [includeChildCodesNotHave, setIncludeChildCodesNotHave] = useState(false);
 
   const handleEthnicityChange = (code, label) => {
     setEthnicity((prev) => {
@@ -79,6 +79,7 @@ function App() {
     };
 
     try {
+      console.log("Cohort definition:", JSON.stringify(cohortDefinition, null, 2));
       const response = await fetch('/api/cohort/select', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -258,6 +259,48 @@ function App() {
 
         <Button variant="primary" type="submit">Submit</Button>
       </Form>
+
+      <hr />
+      <h5>Summary of Selected Criteria</h5>
+      <ul>
+        <li><strong>Title:</strong> {title || "N/A"}</li>
+        <li><strong>Genders:</strong> {
+          selectedGenders.length === 0
+            ? "All"
+            : selectedGenders
+                .map(item => `${item.display}`)
+                .join(', ')
+        }</li>
+        <li><strong>Age Range:</strong> {minAge} - {maxAge}</li>
+        <li><strong>Ethnicities:</strong> {
+          ethnicity.length === 0
+            ? "All"
+            : ethnicity
+                .map(item => `${item.display}`)
+                .join(', ')
+        }</li>
+        <li><strong>Time Range:</strong> {
+          startDate || endDate
+            ? `${startDate || "Any"} to ${endDate || "Any"}`
+            : "Any"
+        }</li>
+        <li><strong>Must Have Findings/Disorders:</strong> {
+          mustHaveFindings.length === 0
+            ? "None"
+            : mustHaveFindings
+                .map(item => item.code && item.code[0] ? item.code[0].display : null)
+                .filter(displayValue => displayValue)
+                .join(', ') || "None"
+        }</li>
+        <li><strong>Must Not Have Findings/Disorders:</strong> {
+          mustNotHaveFindings.length === 0
+            ? "None"
+            : mustNotHaveFindings
+                .map(item => item.code && item.code[0] ? item.code[0].display : null)
+                .filter(displayValue => displayValue)
+                .join(', ') || "None"
+        }</li>
+      </ul>
     </div>
   );
 }
