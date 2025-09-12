@@ -8,13 +8,19 @@ const SnomedSearch = (args) => {
   const [options, setOptions] = useState([]);
 
   const handleSearch = (query) => {
-    setIsLoading(true);
-    fetch(`/api/snomed/search?ecl=<<${args.target_code}&term=${query}`)
-      .then(response => response.json())
-      .then(data => {
-        setOptions(data.expansion.contains || []);
-        setIsLoading(false);
-      });
+  setIsLoading(true);
+  fetch(`/api/snomed/search?ecl=<<${args.target_code}&term=${query}`)
+    .then(response => response.json())
+    .then(data => {
+      const options = data.expansion?.contains || []; // ✅ Optional chaining
+      setOptions(options);
+      setIsLoading(false);
+    })
+    .catch(error => {
+      console.error("Error fetching SNOMED terms:", error);
+      setOptions([]);
+      setIsLoading(false);
+    });
   };
 
   const selectCode = (selected) => {

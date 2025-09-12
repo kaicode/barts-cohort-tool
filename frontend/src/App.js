@@ -1,15 +1,19 @@
 import './App.css';
 import React, { useState, useEffect } from 'react';
-import { Button, Form } from "react-bootstrap";
+import { BrowserRouter as Router, Routes, Route, useNavigate} from "react-router-dom";
+import { Button, Form, Spinner } from "react-bootstrap";
 import SnomedSearch from "./components/SnomedSearch";
 
 import { ethnicityOptions, genderOptions, defaultAgeRange } from './config/formOptions';
 
-function App() {
-  useEffect(() => {
-    document.title = "Patient Cohorting Tool";
-  }, []);
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
+  PieChart, Pie, Cell 
+} from 'recharts';
 
+// --- Cohort Form Page ---
+function CohortForm() {
+  const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [selectedGenders, setSelectedGenders] = useState([]);
   const [minAge, setMinAge] = useState(defaultAgeRange.min);
@@ -21,39 +25,29 @@ function App() {
   const [mustNotHaveFindings, setMustNotHaveFindings] = useState([]);
   const [includeChildCodesHave, setIncludeChildCodesHave] = useState(false);
   const [includeChildCodesNotHave, setIncludeChildCodesNotHave] = useState(false);
+  const [loading, setLoading] = useState(false); // loading state
+
+  useEffect(() => {
+    document.title = "Patient Cohorting Tool";
+  }, []);
 
   const handleEthnicityChange = (code, label) => {
-    setEthnicity((prev) => {
+    setEthnicity(prev => {
       const ethnicityItem = { code, display: label };
-      return prev.some(item => item.code === code)
-        ? prev.filter(item => item.code !== code)
-        : [...prev, ethnicityItem];
+      return prev.some(item => item.code === code) ? prev.filter(item => item.code !== code) : [...prev, ethnicityItem];
     });
   };
 
   const handleGenderChange = (code, label) => {
-    setSelectedGenders((prev) => {
+    setSelectedGenders(prev => {
       const genderItem = { code, display: label };
-      return prev.some(item => item.code === code)
-        ? prev.filter(item => item.code !== code)
-        : [...prev, genderItem];
+      return prev.some(item => item.code === code) ? prev.filter(item => item.code !== code) : [...prev, genderItem];
     });
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
-    const formatFindings = (items) =>
-      items.map(item => ({
-        code: item.code,
-        codesWithDetails: includeChildCodesHave
-          ? item.codesWithDetails
-          : [item.codesWithDetails.find(d => d.code === item.code[0].code)],
-        display: item.display,
-        count: includeChildCodesHave
-          ? item.count
-          : 1
-      }));
+    setLoading(true);
 
     const cohortDefinition = {
       title,
@@ -64,22 +58,11 @@ function App() {
         ...(startDate && { start: startDate }),
         ...(endDate && { end: endDate }),
       },
-      mustHaveFindings: mustHaveFindings.map(item => ({
-        code: item.code,
-        codesWithDetails: includeChildCodesHave ? item.codesWithDetails : [item.codesWithDetails.find(code => code.code === item.code[0].code)],
-        display: item.display,
-        count: includeChildCodesHave ? item.count : 1
-      })),
-      mustNotHaveFindings: mustNotHaveFindings.map(item => ({
-        code: item.code,
-        codesWithDetails: includeChildCodesNotHave ? item.codesWithDetails : [item.codesWithDetails.find(code => code.code === item.code[0].code)],
-        display: item.display,
-        count: includeChildCodesNotHave ? item.count : 1
-      }))
+      mustHaveFindings,
+      mustNotHaveFindings
     };
 
     try {
-      console.log("Cohort definition:", JSON.stringify(cohortDefinition, null, 2));
       const response = await fetch('/api/cohort/select', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -88,21 +71,26 @@ function App() {
 
       if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
-      console.log(data);
+
+      // ✅ Save results temporarily and open results in new tab
+      sessionStorage.setItem("resultsData", JSON.stringify(data));
+      window.open("/results", "_blank");
+
     } catch (error) {
       console.error('Error:', error);
+      alert("There was an error processing your request.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div style={{ margin: '20px', maxWidth: '600px' }}>
       <h1>Cohort Builder</h1>
-      <p>Use this form to create a cohort by defining the selection criteria.</p>
-
       <Form onSubmit={handleSubmit}>
         <Form.Group className="mb-3" controlId="title">
-          <Form.Label>Cohort Title (Required) </Form.Label>
-          <Form.Control type="text" placeholder="Title" onChange={(e) => setTitle(e.target.value)} />
+          <Form.Label>Cohort Title (Required)</Form.Label>
+          <Form.Control type="text" placeholder="Title" onChange={e => setTitle(e.target.value)} />
         </Form.Group>
 
         <Form.Group className="mb-3" controlId="gender">
@@ -120,12 +108,12 @@ function App() {
 
         <Form.Group className="mb-3">
           <Form.Label>Minimum Age: {minAge}</Form.Label>
-          <Form.Range min={0} max={120} value={minAge} onChange={(e) => setMinAge(Number(e.target.value))} />
+          <Form.Range min={0} max={120} value={minAge} onChange={e => setMinAge(Number(e.target.value))} />
         </Form.Group>
 
         <Form.Group className="mb-3">
           <Form.Label>Maximum Age: {maxAge}</Form.Label>
-          <Form.Range min={0} max={120} value={maxAge} onChange={(e) => setMaxAge(Number(e.target.value))} />
+          <Form.Range min={0} max={120} value={maxAge} onChange={e => setMaxAge(Number(e.target.value))} />
         </Form.Group>
 
         <Form.Group className="mb-3" controlId="ethnicity">
@@ -142,9 +130,9 @@ function App() {
         </Form.Group>
 
         <Form.Group className="mb-3">
-          <Form.Label>Time Range (Optional) </Form.Label>
-          <Form.Control type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          <Form.Control type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ marginTop: "5px" }} />
+          <Form.Label>Time Range (Optional)</Form.Label>
+          <Form.Control type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          <Form.Control type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ marginTop: "5px" }} />
         </Form.Group>
 
         <Form.Group className="mb-3">
@@ -154,52 +142,16 @@ function App() {
             target_code="404684003"
             onSelect={(snomedSelection) => {
               const newCode = snomedSelection.code.code || snomedSelection.code[0]?.code;
-              setMustHaveFindings((prev) =>
-                prev.some(item => (item.code.code || item.code[0]?.code) === newCode)
-                  ? prev
-                  : [...prev, snomedSelection]
-              );
+              setMustHaveFindings(prev => prev.some(item => (item.code.code || item.code[0]?.code) === newCode) ? prev : [...prev, snomedSelection]);
             }}
           />
           <Form.Check
             type="checkbox"
-            label="Include child codes (subsumed concepts)"
+            label="Include child codes"
             checked={includeChildCodesHave}
             onChange={() => setIncludeChildCodesHave(!includeChildCodesHave)}
             style={{ marginTop: "10px" }}
           />
-
-          {mustHaveFindings.length > 0 && (
-            <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
-              {mustHaveFindings.map((item, index) => {
-                const displayValue = item.code?.[0]?.display;
-                const uniqueId = item.code?.[0]?.code;
-                const count = includeChildCodesHave ? item.count : 1;
-
-                return (
-                  <li key={uniqueId}>
-                    <a
-                      href={`https://termbrowser.nhs.uk/?perspective=full&conceptId1=${uniqueId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ textDecoration: "underline", color: "#007bff" }}
-                    >
-                      {displayValue}
-                    </a>{' '}
-                    {`(Include ${count} code${count !== 1 ? 's' : ''})`}
-                    <Button
-                      variant="outline-danger"
-                      size="sm"
-                      onClick={() => setMustHaveFindings(prev => prev.filter((_, i) => i !== index))}
-                      style={{ marginLeft: "10px", padding: "0 6px" }}
-                    >
-                      ❌
-                    </Button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
         </Form.Group>
 
         <Form.Group className="mb-3">
@@ -209,99 +161,151 @@ function App() {
             target_code="404684003"
             onSelect={(snomedSelection) => {
               const newCode = snomedSelection.code.code || snomedSelection.code[0]?.code;
-              setMustNotHaveFindings((prev) =>
-                prev.some(item => (item.code.code || item.code[0]?.code) === newCode)
-                  ? prev
-                  : [...prev, snomedSelection]
-              );
+              setMustNotHaveFindings(prev => prev.some(item => (item.code.code || item.code[0]?.code) === newCode) ? prev : [...prev, snomedSelection]);
             }}
           />
           <Form.Check
             type="checkbox"
-            label="Include child codes (subsumed concepts)"
+            label="Include child codes"
             checked={includeChildCodesNotHave}
             onChange={() => setIncludeChildCodesNotHave(!includeChildCodesNotHave)}
             style={{ marginTop: "10px" }}
           />
-
-          {mustNotHaveFindings.length > 0 && (
-            <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
-              {mustNotHaveFindings.map((item, index) => {
-                const displayValue = item.code?.[0]?.display;
-                const uniqueId = item.code?.[0]?.code;
-                const count = includeChildCodesNotHave ? item.count : 1;
-
-                return (
-                  <li key={uniqueId}>
-                    <a
-                      href={`https://termbrowser.nhs.uk/?perspective=full&conceptId1=${uniqueId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ textDecoration: "underline", color: "#007bff" }}
-                    >
-                      {displayValue}
-                    </a>{' '}
-                    {`(Include ${count} code${count !== 1 ? 's' : ''})`}
-                    <Button
-                      variant="outline-danger"
-                      size="sm"
-                      onClick={() => setMustNotHaveFindings(prev => prev.filter((_, i) => i !== index))}
-                      style={{ marginLeft: "10px", padding: "0 6px" }}
-                    >
-                      ❌
-                    </Button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
         </Form.Group>
 
-        <Button variant="primary" type="submit">Submit</Button>
+        <Button
+          variant="primary"
+          type="submit"
+          disabled={title.trim().length < 5 || loading}
+        >
+          {loading ? <><Spinner animation="border" size="sm" /> Processing...</> : "Submit"}
+        </Button>
+        <div style={{ fontSize: "0.85rem", color: "#6c757d", marginTop: "5px" }}>
+          The button will be enabled once a title has been provided (minimum 5 characters).
+        </div>
       </Form>
+     <hr />
+        <h5>Summary of Selected Criteria</h5>
+        <ul>
+          <li>
+            <strong>Title:</strong> {title || "N/A"}
+          </li>
+          <li>
+            <strong>Genders:</strong>{" "}
+            {selectedGenders.length === 0
+              ? "All"
+              : selectedGenders.map((item) => item.display).join(", ")}
+          </li>
+          <li>
+            <strong>Age Range:</strong> {minAge} - {maxAge}
+          </li>
+          <li>
+            <strong>Ethnicities:</strong>{" "}
+            {ethnicity.length === 0
+              ? "All"
+              : ethnicity.map((item) => item.display).join(", ")}
+          </li>
+          <li>
+            <strong>Time Range:</strong>{" "}
+            {startDate || endDate
+              ? `${startDate || "Any"} to ${endDate || "Any"}`
+              : "Any"}
+          </li>
+          <li>
+            <strong>Must Have Findings/Disorders:</strong>{" "}
+            {mustHaveFindings.length === 0
+              ? "None"
+              : mustHaveFindings
+                  .map((item) => (item.code && item.code[0] ? item.code[0].display : null))
+                  .filter((displayValue) => displayValue)
+                  .join(", ") || "None"}
+          </li>
+          <li>
+            <strong>Must Not Have Findings/Disorders:</strong>{" "}
+            {mustNotHaveFindings.length === 0
+              ? "None"
+              : mustNotHaveFindings
+                  .map((item) => (item.code && item.code[0] ? item.code[0].display : null))
+                  .filter((displayValue) => displayValue)
+                  .join(", ") || "None"}
+          </li>
+        </ul>     
+     </div>
+  );
+}
 
-      <hr />
-      <h5>Summary of Selected Criteria</h5>
-      <ul>
-        <li><strong>Title:</strong> {title || "N/A"}</li>
-        <li><strong>Genders:</strong> {
-          selectedGenders.length === 0
-            ? "All"
-            : selectedGenders
-                .map(item => `${item.display}`)
-                .join(', ')
-        }</li>
-        <li><strong>Age Range:</strong> {minAge} - {maxAge}</li>
-        <li><strong>Ethnicities:</strong> {
-          ethnicity.length === 0
-            ? "All"
-            : ethnicity
-                .map(item => `${item.display}`)
-                .join(', ')
-        }</li>
-        <li><strong>Time Range:</strong> {
-          startDate || endDate
-            ? `${startDate || "Any"} to ${endDate || "Any"}`
-            : "Any"
-        }</li>
-        <li><strong>Must Have Findings/Disorders:</strong> {
-          mustHaveFindings.length === 0
-            ? "None"
-            : mustHaveFindings
-                .map(item => item.code && item.code[0] ? item.code[0].display : null)
-                .filter(displayValue => displayValue)
-                .join(', ') || "None"
-        }</li>
-        <li><strong>Must Not Have Findings/Disorders:</strong> {
-          mustNotHaveFindings.length === 0
-            ? "None"
-            : mustNotHaveFindings
-                .map(item => item.code && item.code[0] ? item.code[0].display : null)
-                .filter(displayValue => displayValue)
-                .join(', ') || "None"
-        }</li>
-      </ul>
+// --- Results Page ---
+function ResultsPage() {
+  const savedResults = sessionStorage.getItem("resultsData");
+  const results = savedResults ? JSON.parse(savedResults) : null;
+
+  if (!results) return <p>No results to display.</p>;
+
+  const genderData = results.genderCounts || [];
+  const ageData = results.ageGroups || [];
+  const ethnicityData = results.ethnicityCounts || [];
+
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AA336A'];
+
+  return (
+    <div style={{ margin: '20px', maxWidth: '900px' }}>
+      <h1>Results</h1>
+
+      <h3>Gender Distribution</h3>
+      <BarChart width={600} height={300} data={genderData}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="gender" />
+        <YAxis />
+        <Tooltip />
+        <Legend />
+        <Bar dataKey="count" fill="#8884d8" />
+      </BarChart>
+
+      <h3>Age Distribution</h3>
+      <BarChart width={600} height={300} data={ageData}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="range" />
+        <YAxis />
+        <Tooltip />
+        <Legend />
+        <Bar dataKey="count" fill="#82ca9d" />
+      </BarChart>
+
+      <h3>Ethnicity Distribution</h3>
+      <PieChart width={600} height={300}>
+        <Pie
+          data={ethnicityData}
+          dataKey="count"
+          nameKey="ethnicity"
+          cx="50%"
+          cy="50%"
+          outerRadius={100}
+          fill="#8884d8"
+          label
+        >
+          {ethnicityData.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+          ))}
+        </Pie>
+        <Tooltip />
+        <Legend />
+      </PieChart>
+
+      <h3>Raw Data (JSON)</h3>
+      <pre>{JSON.stringify(results, null, 2)}</pre>
     </div>
+  );
+}
+
+// --- App with Router ---
+function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<CohortForm />} />
+        <Route path="/results" element={<ResultsPage />} />
+      </Routes>
+    </Router>
   );
 }
 

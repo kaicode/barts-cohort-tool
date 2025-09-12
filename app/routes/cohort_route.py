@@ -5,6 +5,8 @@ import pyodbc
 from app.config import settings
 import app.services.fhir_client as fhir_client
 import pandas as pd
+import os
+import json
 
 router = APIRouter()
 client = fhir_client.FHIRClient()
@@ -63,9 +65,22 @@ def get_snomed_display(code: str) -> str:
         return 'Unknown'
 
 @router.post("/cohort/select")
+
 async def run_select(cohort_definition: CohortDefinition):
     
     # print(CohortDefinition)
+    
+    # Define the folder and filename
+    output_folder = settings.saved_searches  # change to your desired folder
+    print(output_folder)
+    # os.makedirs(output_folder, exist_ok=True)  # create folder if it doesn't exist
+    filename = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}.json")
+    
+    # Convert Pydantic model to dict and save as JSON
+    with open(filename, "w") as f:
+        json.dump(cohort_definition.dict(), f, indent=4)
+
+    print(f"CohortDefinition saved to {filename}")
 
     displays_gender = []
     # Extract display values
@@ -230,3 +245,13 @@ async def run_select(cohort_definition: CohortDefinition):
         # Close connections
         cursor.close()
         conn.close()
+        
+        
+    # Convert DataFrame to JSON
+    results_json = df_results.to_dict(orient="records")
+    
+    # Return as JSON
+    return {
+        "title": cohort_definition.title,
+        "results": results_json
+        }
