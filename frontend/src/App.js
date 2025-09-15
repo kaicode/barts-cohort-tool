@@ -1,14 +1,14 @@
 import './App.css';
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate} from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
 import { Button, Form, Spinner } from "react-bootstrap";
 import SnomedSearch from "./components/SnomedSearch";
 
 import { ethnicityOptions, genderOptions, defaultAgeRange } from './config/formOptions';
 
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
-  PieChart, Pie, Cell 
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  PieChart, Pie, Cell, ResponsiveContainer
 } from 'recharts';
 
 // --- Cohort Form Page ---
@@ -25,7 +25,7 @@ function CohortForm() {
   const [mustNotHaveFindings, setMustNotHaveFindings] = useState([]);
   const [includeChildCodesHave, setIncludeChildCodesHave] = useState(false);
   const [includeChildCodesNotHave, setIncludeChildCodesNotHave] = useState(false);
-  const [loading, setLoading] = useState(false); // loading state
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     document.title = "Patient Cohorting Tool";
@@ -72,8 +72,9 @@ function CohortForm() {
       if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
 
-      // ✅ Save results temporarily and open results in new tab
+      // Save results and cohort title
       sessionStorage.setItem("resultsData", JSON.stringify(data));
+      sessionStorage.setItem("cohortTitle", title);
       window.open("/results", "_blank");
 
     } catch (error) {
@@ -184,53 +185,18 @@ function CohortForm() {
           The button will be enabled once a title has been provided (minimum 5 characters).
         </div>
       </Form>
-     <hr />
-        <h5>Summary of Selected Criteria</h5>
-        <ul>
-          <li>
-            <strong>Title:</strong> {title || "N/A"}
-          </li>
-          <li>
-            <strong>Genders:</strong>{" "}
-            {selectedGenders.length === 0
-              ? "All"
-              : selectedGenders.map((item) => item.display).join(", ")}
-          </li>
-          <li>
-            <strong>Age Range:</strong> {minAge} - {maxAge}
-          </li>
-          <li>
-            <strong>Ethnicities:</strong>{" "}
-            {ethnicity.length === 0
-              ? "All"
-              : ethnicity.map((item) => item.display).join(", ")}
-          </li>
-          <li>
-            <strong>Time Range:</strong>{" "}
-            {startDate || endDate
-              ? `${startDate || "Any"} to ${endDate || "Any"}`
-              : "Any"}
-          </li>
-          <li>
-            <strong>Must Have Findings/Disorders:</strong>{" "}
-            {mustHaveFindings.length === 0
-              ? "None"
-              : mustHaveFindings
-                  .map((item) => (item.code && item.code[0] ? item.code[0].display : null))
-                  .filter((displayValue) => displayValue)
-                  .join(", ") || "None"}
-          </li>
-          <li>
-            <strong>Must Not Have Findings/Disorders:</strong>{" "}
-            {mustNotHaveFindings.length === 0
-              ? "None"
-              : mustNotHaveFindings
-                  .map((item) => (item.code && item.code[0] ? item.code[0].display : null))
-                  .filter((displayValue) => displayValue)
-                  .join(", ") || "None"}
-          </li>
-        </ul>     
-     </div>
+      <hr />
+      <h5>Summary of Selected Criteria</h5>
+      <ul>
+        <li><strong>Title:</strong> {title || "N/A"}</li>
+        <li><strong>Genders:</strong> {selectedGenders.length === 0 ? "All" : selectedGenders.map((item) => item.display).join(", ")}</li>
+        <li><strong>Age Range:</strong> {minAge} - {maxAge}</li>
+        <li><strong>Ethnicities:</strong> {ethnicity.length === 0 ? "All" : ethnicity.map((item) => item.display).join(", ")}</li>
+        <li><strong>Time Range:</strong> {startDate || endDate ? `${startDate || "Any"} to ${endDate || "Any"}` : "Any"}</li>
+        <li><strong>Must Have Findings/Disorders:</strong> {mustHaveFindings.length === 0 ? "None" : mustHaveFindings.map((item) => (item.code && item.code[0] ? item.code[0].display : null)).filter(Boolean).join(", ") || "None"}</li>
+        <li><strong>Must Not Have Findings/Disorders:</strong> {mustNotHaveFindings.length === 0 ? "None" : mustNotHaveFindings.map((item) => (item.code && item.code[0] ? item.code[0].display : null)).filter(Boolean).join(", ") || "None"}</li>
+      </ul>
+    </div>
   );
 }
 
@@ -244,55 +210,78 @@ function ResultsPage() {
   const genderData = results.genderCounts || [];
   const ageData = results.ageGroups || [];
   const ethnicityData = results.ethnicityCounts || [];
+  const topDiagnoses = results.topDiagnoses || [];
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AA336A'];
 
   return (
     <div style={{ margin: '20px', maxWidth: '900px' }}>
-      <h1>Results</h1>
+      <h1>Results for Cohort {results.title || "Untitled"}</h1>
 
+      {/* Cohort Summary */}
+      <div style={{ marginBottom: '20px' }}>
+        <h4>Cohort Summary</h4>
+        <p>Total Patients: {results.total_patients || 0}</p>
+        <p>Unique Diagnoses: {results.uniqueDiagnoses || 0}</p>
+        <p>Age Range: {results.minAge || '-'} - {results.maxAge || '-'}</p>
+      </div>
+
+      {/* Gender Distribution */}
       <h3>Gender Distribution</h3>
-      <BarChart width={600} height={300} data={genderData}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="gender" />
-        <YAxis />
-        <Tooltip />
-        <Legend />
-        <Bar dataKey="count" fill="#8884d8" />
-      </BarChart>
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={genderData}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="gender" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          <Bar dataKey="count" fill="#8884d8" />
+        </BarChart>
+      </ResponsiveContainer>
 
+      {/* Age Distribution */}
       <h3>Age Distribution</h3>
-      <BarChart width={600} height={300} data={ageData}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="range" />
-        <YAxis />
-        <Tooltip />
-        <Legend />
-        <Bar dataKey="count" fill="#82ca9d" />
-      </BarChart>
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={ageData}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="range" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          <Bar dataKey="count" fill="#82ca9d" />
+        </BarChart>
+      </ResponsiveContainer>
 
-      <h3>Ethnicity Distribution</h3>
-      <PieChart width={600} height={300}>
-        <Pie
-          data={ethnicityData}
-          dataKey="count"
-          nameKey="ethnicity"
-          cx="50%"
-          cy="50%"
-          outerRadius={100}
-          fill="#8884d8"
-          label
-        >
-          {ethnicityData.map((entry, index) => (
-            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-          ))}
-        </Pie>
-        <Tooltip />
-        <Legend />
-      </PieChart>
+      {/* Ethnicity Distribution */}
+      <h3 style={{ marginBottom: '20px' }}>Ethnicity Distribution</h3>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: "40px" }}>
+        <PieChart width={600} height={350}>
+          <Pie
+            data={ethnicityData}
+            dataKey="count"
+            nameKey="ethnicity"
+            cx="50%"
+            cy="55%"
+            outerRadius={120}
+            fill="#8884d8"
+            label
+          >
+            {ethnicityData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+            ))}
+          </Pie>
+          <Tooltip />
+          <Legend verticalAlign="bottom" height={36} />
+        </PieChart>
+      </div>
 
-      <h3>Raw Data (JSON)</h3>
-      <pre>{JSON.stringify(results, null, 2)}</pre>
+      {/* Raw JSON (commented out) */}
+      {/*
+      <section>
+        <h3>Raw Data (JSON)</h3>
+        <pre>{JSON.stringify(results, null, 2)}</pre>
+      </section>
+      */}
     </div>
   );
 }
