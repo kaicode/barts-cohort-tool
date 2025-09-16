@@ -85,13 +85,15 @@ function CohortForm() {
     }
   };
 
-  return (
+    return (
     <div style={{ margin: '20px', maxWidth: '600px' }}>
       <h1>Cohort Builder</h1>
+      <p>Use this form to create a cohort by defining the selection criteria.</p>
+
       <Form onSubmit={handleSubmit}>
         <Form.Group className="mb-3" controlId="title">
-          <Form.Label>Cohort Title (Required)</Form.Label>
-          <Form.Control type="text" placeholder="Title" onChange={e => setTitle(e.target.value)} />
+          <Form.Label>Cohort Title (Required) </Form.Label>
+          <Form.Control type="text" placeholder="Title" onChange={(e) => setTitle(e.target.value)} />
         </Form.Group>
 
         <Form.Group className="mb-3" controlId="gender">
@@ -109,12 +111,12 @@ function CohortForm() {
 
         <Form.Group className="mb-3">
           <Form.Label>Minimum Age: {minAge}</Form.Label>
-          <Form.Range min={0} max={120} value={minAge} onChange={e => setMinAge(Number(e.target.value))} />
+          <Form.Range min={0} max={120} value={minAge} onChange={(e) => setMinAge(Number(e.target.value))} />
         </Form.Group>
 
         <Form.Group className="mb-3">
           <Form.Label>Maximum Age: {maxAge}</Form.Label>
-          <Form.Range min={0} max={120} value={maxAge} onChange={e => setMaxAge(Number(e.target.value))} />
+          <Form.Range min={0} max={120} value={maxAge} onChange={(e) => setMaxAge(Number(e.target.value))} />
         </Form.Group>
 
         <Form.Group className="mb-3" controlId="ethnicity">
@@ -131,9 +133,9 @@ function CohortForm() {
         </Form.Group>
 
         <Form.Group className="mb-3">
-          <Form.Label>Time Range (Optional)</Form.Label>
-          <Form.Control type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-          <Form.Control type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ marginTop: "5px" }} />
+          <Form.Label>Time Range (Optional) </Form.Label>
+          <Form.Control type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <Form.Control type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ marginTop: "5px" }} />
         </Form.Group>
 
         <Form.Group className="mb-3">
@@ -143,16 +145,52 @@ function CohortForm() {
             target_code="404684003"
             onSelect={(snomedSelection) => {
               const newCode = snomedSelection.code.code || snomedSelection.code[0]?.code;
-              setMustHaveFindings(prev => prev.some(item => (item.code.code || item.code[0]?.code) === newCode) ? prev : [...prev, snomedSelection]);
+              setMustHaveFindings((prev) =>
+                prev.some(item => (item.code.code || item.code[0]?.code) === newCode)
+                  ? prev
+                  : [...prev, snomedSelection]
+              );
             }}
           />
           <Form.Check
             type="checkbox"
-            label="Include child codes"
+            label="Include child codes (subsumed concepts)"
             checked={includeChildCodesHave}
             onChange={() => setIncludeChildCodesHave(!includeChildCodesHave)}
             style={{ marginTop: "10px" }}
           />
+
+          {mustHaveFindings.length > 0 && (
+            <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
+              {mustHaveFindings.map((item, index) => {
+                const displayValue = item.code?.[0]?.display;
+                const uniqueId = item.code?.[0]?.code;
+                const count = includeChildCodesHave ? item.count : 1;
+
+                return (
+                  <li key={uniqueId}>
+                    <a
+                      href={`https://termbrowser.nhs.uk/?perspective=full&conceptId1=${uniqueId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ textDecoration: "underline", color: "#007bff" }}
+                    >
+                      {displayValue}
+                    </a>{' '}
+                    {`(Include ${count} code${count !== 1 ? 's' : ''})`}
+                    <Button
+                      variant="outline-danger"
+                      size="sm"
+                      onClick={() => setMustHaveFindings(prev => prev.filter((_, i) => i !== index))}
+                      style={{ marginLeft: "10px", padding: "0 6px" }}
+                    >
+                      ❌
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </Form.Group>
 
         <Form.Group className="mb-3">
@@ -162,31 +200,58 @@ function CohortForm() {
             target_code="404684003"
             onSelect={(snomedSelection) => {
               const newCode = snomedSelection.code.code || snomedSelection.code[0]?.code;
-              setMustNotHaveFindings(prev => prev.some(item => (item.code.code || item.code[0]?.code) === newCode) ? prev : [...prev, snomedSelection]);
+              setMustNotHaveFindings((prev) =>
+                prev.some(item => (item.code.code || item.code[0]?.code) === newCode)
+                  ? prev
+                  : [...prev, snomedSelection]
+              );
             }}
           />
           <Form.Check
             type="checkbox"
-            label="Include child codes"
+            label="Include child codes (subsumed concepts)"
             checked={includeChildCodesNotHave}
             onChange={() => setIncludeChildCodesNotHave(!includeChildCodesNotHave)}
             style={{ marginTop: "10px" }}
           />
+
+          {mustNotHaveFindings.length > 0 && (
+            <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
+              {mustNotHaveFindings.map((item, index) => {
+                const displayValue = item.code?.[0]?.display;
+                const uniqueId = item.code?.[0]?.code;
+                const count = includeChildCodesNotHave ? item.count : 1;
+
+                return (
+                  <li key={uniqueId}>
+                    <a
+                      href={`https://termbrowser.nhs.uk/?perspective=full&conceptId1=${uniqueId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ textDecoration: "underline", color: "#007bff" }}
+                    >
+                      {displayValue}
+                    </a>{' '}
+                    {`(Include ${count} code${count !== 1 ? 's' : ''})`}
+                    <Button
+                      variant="outline-danger"
+                      size="sm"
+                      onClick={() => setMustNotHaveFindings(prev => prev.filter((_, i) => i !== index))}
+                      style={{ marginLeft: "10px", padding: "0 6px" }}
+                    >
+                      ❌
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </Form.Group>
 
-        <Button
-          variant="primary"
-          type="submit"
-          disabled={title.trim().length < 5 || loading}
-        >
-          {loading ? <><Spinner animation="border" size="sm" /> Processing...</> : "Submit"}
-        </Button>
-        <div style={{ fontSize: "0.85rem", color: "#6c757d", marginTop: "5px" }}>
-          The button will be enabled once a title has been provided (minimum 5 characters).
-        </div>
+        <Button variant="primary" type="submit">Submit</Button>
       </Form>
-      <hr />
-      <h5>Summary of Selected Criteria</h5>
+      
+      <h5 style={{ marginTop: '25px' }}>Summary of Selected Criteria</h5>
       <ul>
         <li><strong>Title:</strong> {title || "N/A"}</li>
         <li><strong>Genders:</strong> {selectedGenders.length === 0 ? "All" : selectedGenders.map((item) => item.display).join(", ")}</li>
@@ -217,71 +282,80 @@ function ResultsPage() {
   return (
     <div style={{ margin: '20px', maxWidth: '900px' }}>
       <h1>Results for Cohort {results.title || "Untitled"}</h1>
-
+    
       {/* Cohort Summary */}
       <div style={{ marginBottom: '20px' }}>
         <h4>Cohort Summary</h4>
-        <p>Total Patients: {results.total_patients || 0}</p>
-        <p>Unique Diagnoses: {results.uniqueDiagnoses || 0}</p>
-        <p>Age Range: {results.minAge || '-'} - {results.maxAge || '-'}</p>
+        <p style={{ marginTop: '10px' }}>Total Patients: {results.total_patients || 0}</p>
+        {!results.total_patients && (
+          <p style={{ color: "red", fontStyle: "italic" }}>No results to display</p>
+        )}        
       </div>
+    
+      {/* Only show charts if patients exist */}
+      {results.total_patients > 0 && (
+        <>
+          <p>Unique Diagnoses: {results.uniqueDiagnoses || 0}</p>
+          <p>Age Range: {results.minAge || '-'} - {results.maxAge || '-'}</p>
+            
+          {/* Gender Distribution */}
+          <h3>Gender Distribution</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={genderData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="gender" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="count" fill="#8884d8" />
+            </BarChart>
+          </ResponsiveContainer>
+    
+          {/* Age Distribution */}
+          <h3>Age Distribution</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={ageData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="range" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="count" fill="#82ca9d" />
+            </BarChart>
+          </ResponsiveContainer>
+    
+          {/* Ethnicity Distribution */}
+          <h3 style={{ marginBottom: '20px' }}>Ethnicity Distribution</h3>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: "40px" }}>
+            <PieChart width={600} height={350}>
+              <Pie
+                data={ethnicityData}
+                dataKey="count"
+                nameKey="ethnicity"
+                cx="50%"
+                cy="55%"
+                outerRadius={120}
+                fill="#8884d8"
+                label
+              >
+                {ethnicityData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+              <Legend verticalAlign="bottom" height={36} />
+            </PieChart>
+          </div>
 
-      {/* Gender Distribution */}
-      <h3>Gender Distribution</h3>
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={genderData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="gender" />
-          <YAxis />
-          <Tooltip />
-          <Legend />
-          <Bar dataKey="count" fill="#8884d8" />
-        </BarChart>
-      </ResponsiveContainer>
-
-      {/* Age Distribution */}
-      <h3>Age Distribution</h3>
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={ageData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="range" />
-          <YAxis />
-          <Tooltip />
-          <Legend />
-          <Bar dataKey="count" fill="#82ca9d" />
-        </BarChart>
-      </ResponsiveContainer>
-
-      {/* Ethnicity Distribution */}
-      <h3 style={{ marginBottom: '20px' }}>Ethnicity Distribution</h3>
-      <div style={{ display: "flex", justifyContent: "center", marginBottom: "40px" }}>
-        <PieChart width={600} height={350}>
-          <Pie
-            data={ethnicityData}
-            dataKey="count"
-            nameKey="ethnicity"
-            cx="50%"
-            cy="55%"
-            outerRadius={120}
-            fill="#8884d8"
-            label
-          >
-            {ethnicityData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-            ))}
-          </Pie>
-          <Tooltip />
-          <Legend verticalAlign="bottom" height={36} />
-        </PieChart>
-      </div>
-
-      {/* Raw JSON (commented out) */}
-      {/*
-      <section>
-        <h3>Raw Data (JSON)</h3>
-        <pre>{JSON.stringify(results, null, 2)}</pre>
-      </section>
-      */}
+          {/* Raw JSON (commented out) */}
+          {/*
+          <section>
+            <h3>Raw Data (JSON)</h3>
+            <pre>{JSON.stringify(results, null, 2)}</pre>
+          </section>
+          */}
+        </>
+      )}
     </div>
   );
 }

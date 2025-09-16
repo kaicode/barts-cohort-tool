@@ -173,6 +173,11 @@ async def run_select(cohort_definition: CohortDefinition):
         GROUP BY b.Gender, b.Ethnicity, c.DiagCode, a.Adm_Dt, c.Diagnosis, b.Year_of_Birth
     """
 
+    print('final query')
+    print(final_query)
+    
+    print('params')
+    print(params)
     
     # Run the query
     df_results = pd.DataFrame()
@@ -207,12 +212,17 @@ async def run_select(cohort_definition: CohortDefinition):
         # Age groups (bucket by decades)
         current_year = pd.to_datetime("today").year
         df_results["Age"] = current_year - df_results["Year_of_Birth"]
-        df_results["AgeGroup"] = (df_results["Age"] // 10 * 10).astype(str) + "-" + (
-            (df_results["Age"] // 10 * 10 + 9).astype(str)
-        )
+        
+        bins = [18, 30, 40, 50, 60, 70, 80, 90, 100, float("inf")]
+        labels = ["18-29","30-39","40-49","50-59","60-69","70-79","80-89","90-99","100+"]
+        
+        df_results["AgeGroup"] = pd.cut(df_results["Age"], bins=bins, labels=labels, right=False)
+        
+        # Ensure all labels appear even if count is 0
         age_groups = (
             df_results.groupby("AgeGroup")["patient_count"]
             .sum()
+            .reindex(labels, fill_value=0)  # <-- reindex ensures missing groups appear with 0
             .reset_index()
             .rename(columns={"AgeGroup": "range", "patient_count": "count"})
             .to_dict(orient="records")
@@ -228,20 +238,27 @@ async def run_select(cohort_definition: CohortDefinition):
         )
         
         # Overall age range
-        age_min = df_results["Age"].min()
-        age_max = df_results["Age"].max()
+        if df_results["Age"].notna().any():
+            age_min = int(df_results["Age"].min(skipna=True))
+            age_max = int(df_results["Age"].max(skipna=True))
+        else:
+            age_min = "NA"
+            age_max = "NA"
 
         # Raw results
         results_json = df_results.to_dict(orient="records")
     else:
         gender_counts, age_groups, ethnicity_counts, results_json = [], [], [], []
+        
+        age_min = "NA"
+        age_max = "NA"
 
     
     return {
         "title": cohort_definition.title,
         "total_patients": int(total_patients),
-        "minAge": int(age_min),
-        "maxAge": int(age_max),        
+        "minAge": age_min,
+        "maxAge": age_max,        
         "genderCounts": gender_counts,
         "ageGroups": age_groups,
         "ethnicityCounts": ethnicity_counts,
