@@ -248,7 +248,16 @@ function CohortForm() {
           )}
         </Form.Group>
 
-        <Button variant="primary" type="submit">Submit</Button>
+        <Button
+          variant="primary"
+          type="submit"
+          disabled={title.trim().length < 5 || loading}
+        >
+          {loading ? <><Spinner animation="border" size="sm" /> Processing...</> : "Submit"}
+        </Button>
+        <div style={{ fontSize: "0.85rem", color: "#6c757d", marginTop: "5px" }}>
+          The button will be enabled once a title has been provided (minimum 5 characters).
+        </div>
       </Form>
       
       <h5 style={{ marginTop: '25px' }}>Summary of Selected Criteria</h5>
