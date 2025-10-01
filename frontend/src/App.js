@@ -49,18 +49,41 @@ function CohortForm() {
     event.preventDefault();
     setLoading(true);
 
-    const cohortDefinition = {
-      title,
-      gender: selectedGenders.length === 0 ? "ALL" : selectedGenders,
-      ageRange: { min: minAge, max: maxAge },
-      ethnicity: ethnicity.length === 0 ? "ALL" : ethnicity,
-      timeRange: {
-        ...(startDate && { start: startDate }),
-        ...(endDate && { end: endDate }),
-      },
-      mustHaveFindings,
-      mustNotHaveFindings
-    };
+    // Helper: keep only the main code if child codes not included
+  const processFindings = (findings, includeChildren) => {
+  return findings.map(item => {
+    if (includeChildren) {
+      // keep full object as-is
+      return item;
+    } else {
+      // keep the original structure, but only the main code in codesWithDetails
+      const mainCode = Array.isArray(item.code) ? item.code[0] : item.code;
+      return {
+        ...item,
+        count: item.count, // keep the original count
+        codesWithDetails: mainCode
+          ? [{ code: mainCode.code, display: mainCode.display, count: 1 }]
+          : [],
+      };
+    }
+  });
+};
+
+  const cohortDefinition = {
+    title,
+    gender: selectedGenders.length === 0 ? "ALL" : selectedGenders,
+    ageRange: { min: minAge, max: maxAge },
+    ethnicity: ethnicity.length === 0 ? "ALL" : ethnicity,
+    timeRange: {
+      ...(startDate && { start: startDate }),
+      ...(endDate && { end: endDate }),
+    },
+    mustHaveFindings: processFindings(mustHaveFindings, includeChildCodesHave),
+    mustNotHaveFindings: processFindings(mustNotHaveFindings, includeChildCodesNotHave),
+  };
+  
+  // console.log("Submitting cohortDefinition:", JSON.stringify(cohortDefinition, null, 2));
+
 
     try {
       const response = await fetch('/api/cohort/select', {
