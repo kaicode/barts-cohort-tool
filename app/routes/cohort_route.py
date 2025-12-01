@@ -194,64 +194,77 @@ async def run_select(cohort_definition: CohortDefinition):
     # Total patients
     total_patients = df_results["patient_count"].sum()
     
+    print("Total patients")
+    print(total_patients)
+
     
-    # Build aggregated results for frontend
-    if not df_results.empty:
-        # Ensure DiagCode is string
-        df_results["DiagCode"] = df_results["DiagCode"].astype(str)
-
-        # Gender counts
-        gender_counts = (
-            df_results.groupby("Gender")["patient_count"]
-            .sum()
-            .reset_index()
-            .rename(columns={"Gender": "gender", "patient_count": "count"})
-            .to_dict(orient="records")
-        )
-
-        # Age groups (bucket by decades)
-        current_year = pd.to_datetime("today").year
-        df_results["Age"] = current_year - df_results["Year_of_Birth"]
+    # Apply disclosure control: if <10, return 0
+    if total_patients < 10:
+        total_patients = 0
         
-        bins = [18, 30, 40, 50, 60, 70, 80, 90, 100, float("inf")]
-        labels = ["18-29","30-39","40-49","50-59","60-69","70-79","80-89","90-99","100+"]
-        
-        df_results["AgeGroup"] = pd.cut(df_results["Age"], bins=bins, labels=labels, right=False)
-        
-        # Ensure all labels appear even if count is 0
-        age_groups = (
-            df_results.groupby("AgeGroup")["patient_count"]
-            .sum()
-            .reindex(labels, fill_value=0)  # <-- reindex ensures missing groups appear with 0
-            .reset_index()
-            .rename(columns={"AgeGroup": "range", "patient_count": "count"})
-            .to_dict(orient="records")
-        )
-
-        # Ethnicity counts
-        ethnicity_counts = (
-            df_results.groupby("Ethnicity")["patient_count"]
-            .sum()
-            .reset_index()
-            .rename(columns={"Ethnicity": "ethnicity", "patient_count": "count"})
-            .to_dict(orient="records")
-        )
-        
-        # Overall age range
-        if df_results["Age"].notna().any():
-            age_min = int(df_results["Age"].min(skipna=True))
-            age_max = int(df_results["Age"].max(skipna=True))
-        else:
-            age_min = "NA"
-            age_max = "NA"
-
-        # Raw results
-        results_json = df_results.to_dict(orient="records")
-    else:
         gender_counts, age_groups, ethnicity_counts, results_json = [], [], [], []
         
         age_min = "NA"
         age_max = "NA"
+        
+    else:
+        # Build aggregated results for frontend
+        if not df_results.empty:
+            # Ensure DiagCode is string
+            df_results["DiagCode"] = df_results["DiagCode"].astype(str)
+
+            # Gender counts
+            gender_counts = (
+                df_results.groupby("Gender")["patient_count"]
+                .sum()
+                .reset_index()
+                .rename(columns={"Gender": "gender", "patient_count": "count"})
+                .to_dict(orient="records")
+            )
+
+            # Age groups (bucket by decades)
+            current_year = pd.to_datetime("today").year
+            df_results["Age"] = current_year - df_results["Year_of_Birth"]
+            
+            bins = [18, 30, 40, 50, 60, 70, 80, 90, 100, float("inf")]
+            labels = ["18-29","30-39","40-49","50-59","60-69","70-79","80-89","90-99","100+"]
+            
+            df_results["AgeGroup"] = pd.cut(df_results["Age"], bins=bins, labels=labels, right=False)
+            
+            # Ensure all labels appear even if count is 0
+            age_groups = (
+                df_results.groupby("AgeGroup")["patient_count"]
+                .sum()
+                .reindex(labels, fill_value=0)  # <-- reindex ensures missing groups appear with 0
+                .reset_index()
+                .rename(columns={"AgeGroup": "range", "patient_count": "count"})
+                .to_dict(orient="records")
+            )
+
+            # Ethnicity counts
+            ethnicity_counts = (
+                df_results.groupby("Ethnicity")["patient_count"]
+                .sum()
+                .reset_index()
+                .rename(columns={"Ethnicity": "ethnicity", "patient_count": "count"})
+                .to_dict(orient="records")
+            )
+            
+            # Overall age range
+            if df_results["Age"].notna().any():
+                age_min = int(df_results["Age"].min(skipna=True))
+                age_max = int(df_results["Age"].max(skipna=True))
+            else:
+                age_min = "NA"
+                age_max = "NA"
+
+            # Raw results
+            results_json = df_results.to_dict(orient="records")
+        else:
+            gender_counts, age_groups, ethnicity_counts, results_json = [], [], [], []
+            
+            age_min = "NA"
+            age_max = "NA"
 
     
     return {

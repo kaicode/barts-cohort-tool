@@ -156,7 +156,7 @@ function CohortForm() {
         </Form.Group>
 
         <Form.Group className="mb-3">
-          <Form.Label>Time Range (Optional) </Form.Label>
+          <Form.Label>Admission Time Range (Optional) </Form.Label>
           <Form.Control type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           <Form.Control type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ marginTop: "5px" }} />
         </Form.Group>
@@ -289,7 +289,7 @@ function CohortForm() {
         <li><strong>Genders:</strong> {selectedGenders.length === 0 ? "All" : selectedGenders.map((item) => item.display).join(", ")}</li>
         <li><strong>Age Range:</strong> {minAge} - {maxAge}</li>
         <li><strong>Ethnicities:</strong> {ethnicity.length === 0 ? "All" : ethnicity.map((item) => item.display).join(", ")}</li>
-        <li><strong>Time Range:</strong> {startDate || endDate ? `${startDate || "Any"} to ${endDate || "Any"}` : "Any"}</li>
+        <li><strong>Admission Time Range:</strong> {startDate || endDate ? `${startDate || "Any"} to ${endDate || "Any"}` : "Any"}</li>
         <li><strong>Must Have Findings/Disorders:</strong> {mustHaveFindings.length === 0 ? "None" : mustHaveFindings.map((item) => (item.code && item.code[0] ? item.code[0].display : null)).filter(Boolean).join(", ") || "None"}</li>
         <li><strong>Must Not Have Findings/Disorders:</strong> {mustNotHaveFindings.length === 0 ? "None" : mustNotHaveFindings.map((item) => (item.code && item.code[0] ? item.code[0].display : null)).filter(Boolean).join(", ") || "None"}</li>
       </ul>
@@ -313,7 +313,7 @@ function ResultsPage() {
 
   return (
     <div style={{ margin: '20px', maxWidth: '900px' }}>
-      <h1>Results for Cohort {results.title || "Untitled"}</h1>
+      <h1>Results for {results.title || "Untitled"}</h1>
     
       {/* Cohort Summary */}
       <div style={{ marginBottom: '20px' }}>
@@ -327,8 +327,8 @@ function ResultsPage() {
       {/* Only show charts if patients exist */}
       {results.total_patients > 0 && (
         <>
-          <p>Unique Diagnoses: {results.uniqueDiagnoses || 0}</p>
-          <p>Age Range: {results.minAge || '-'} - {results.maxAge || '-'}</p>
+          {/* <p>Unique Diagnoses: {results.uniqueDiagnoses || 0}</p> */}
+          {/* <p>Age Range: {results.minAge || '-'} - {results.maxAge || '-'}</p> */} 
             
           {/* Gender Distribution */}
           <h3>Gender Distribution</h3>

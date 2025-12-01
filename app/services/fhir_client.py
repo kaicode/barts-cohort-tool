@@ -31,16 +31,16 @@ class FHIRClient:
         response = self.session.post(settings.fhir_api_auth_server, headers=headers, data=data, timeout=40)
         token_data = response.json()
         self.access_token = token_data["access_token"]
-        self.token_expiry = time.time() + token_data.get("expires_in", 3600) - 60  # buffer of 1 min
+        self.token_expiry = time.time() + token_data.get("expires_in", 3600) - 600  # buffer of 10 mins
 
     def search_snomed(self, ecl: str, term: str, count: int = 20):
         url = f"{settings.fhir_api_url}/ValueSet/$expand?url=http://snomed.info/sct?fhir_vs=ecl/{ecl}&filter={term}"
-        response = self.session.get(url, headers=self.get_headers(), timeout=30)
+        response = self.session.get(url, headers=self.get_headers(), timeout=60)
         return response.json()
 
     def map_snomed_to_icd10(self, snomed_code):
         source_system = "http://snomed.info/sct"
         target_system = "http://hl7.org/fhir/sid/icd-10"
         url = f"{settings.fhir_api_url}/ConceptMap/$translate?code={snomed_code}&system={source_system}&targetsystem={target_system}"
-        response = self.session.get(url, headers=self.get_headers(), timeout=30)
+        response = self.session.get(url, headers=self.get_headers(), timeout=60)
         return response.json()
