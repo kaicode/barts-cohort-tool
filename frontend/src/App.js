@@ -111,8 +111,11 @@ function CohortForm() {
     return (
     <div style={{ margin: '20px', maxWidth: '600px' }}>
       <h1>Cohort Builder</h1>
-      <p>Use this form to create a cohort by defining the selection criteria.</p>
-
+      <p>Use this form to create a cohort by defining the selection criteria. </p>
+      <p>
+          If you have any issues, feedback, or comments, please email the Barts Life Sciences team at&nbsp;  
+          <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">bartshealth.bls.cohortingtool@nhs.net</a>
+      </p>
       <Form onSubmit={handleSubmit}>
         <Form.Group className="mb-3" controlId="title">
           <Form.Label>Cohort Title (Required) </Form.Label>
