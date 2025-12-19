@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     fhir_api_client_secret: str
     dw_connection: str
     saved_searches: str
+    sql_query: str
 
 
     class Config:

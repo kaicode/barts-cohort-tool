@@ -117,21 +117,7 @@ async def run_select(cohort_definition: CohortDefinition):
                         mustNOThaveSnomedCodes.append(detail.code)
     
     # Base SELECT and JOIN statements
-    base_query = """
-        SELECT 
-            a.Adm_Dt, 
-            b.Gender, 
-            b.Ethnicity,
-            CAST(c.DiagCode AS VARCHAR(50)) AS DiagCode,
-            c.Diagnosis, 
-            b.Year_of_Birth,
-            COUNT(*) AS patient_count
-        FROM [synth].[rde_cds_apc_PCT] a WITH(NOLOCK) 
-        INNER JOIN [synth].[rde_patient_demographics_PCT] b WITH(NOLOCK) 
-        ON a.PERSON_ID = b.PERSON_ID
-        INNER JOIN [synth].[rde_pc_diagnosis_PCT] c WITH(NOLOCK)
-        ON b.PERSON_ID = c.PERSON_ID
-    """
+    base_query = settings.sql_query
     
     # Build WHERE conditions and parameters
     where_conditions = []
