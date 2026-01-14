@@ -41,6 +41,9 @@ class FindingItem(BaseModel):
     count: Optional[int]
     codesWithDetails: Optional[List[CodeDetail]]
 
+class MedicationItem(BaseModel):
+    medicationName: str
+
 class TimeRange(BaseModel):
     start: Optional[str] = None
     end: Optional[str] = None
@@ -53,6 +56,8 @@ class CohortDefinition(BaseModel):
     timeRange: Optional[TimeRange]
     mustHaveFindings: Optional[List[FindingItem]]
     mustNotHaveFindings: Optional[List[FindingItem]]
+    mustHaveMedications: Optional[List[MedicationItem]]
+    mustNotHaveMedications: Optional[List[MedicationItem]]
 
 # Helper function to fetch SNOMED display name
 def get_snomed_display(code: str) -> str:
@@ -99,7 +104,7 @@ async def run_select(cohort_definition: CohortDefinition):
     else:
         ethnicity_list = [{"code": item.code, "display": item.display} for item in ethnicity]
 
-    # Must-have & must-not-have codes
+    # Must-have & must-not-have diagnosis codes
     musthaveSnomedCodes = []
     if cohort_definition.mustHaveFindings:
         for item in cohort_definition.mustHaveFindings:
@@ -116,7 +121,18 @@ async def run_select(cohort_definition: CohortDefinition):
                     if detail.code:
                         mustNOThaveSnomedCodes.append(detail.code)
     
+    # Must-have & must-not-have medications
+    musthaveMedications = []
+    if cohort_definition.mustHaveMedications:
+        musthaveMedications = [item.medicationName for item in cohort_definition.mustHaveMedications]
+    
+    mustNOThaveMedications = []
+    if cohort_definition.mustNotHaveMedications:
+        mustNOThaveMedications = [item.medicationName for item in cohort_definition.mustNotHaveMedications]
+    
     # Base SELECT and JOIN statements
+    # Note: Using LEFT JOINs for medadmin to include patients without medication records
+    # PERSONID in medadmin needs to match Person_ID in demographics and diagnosis
     base_query = """
         SELECT 
             a.Adm_Dt, 
@@ -125,12 +141,16 @@ async def run_select(cohort_definition: CohortDefinition):
             CAST(c.DiagCode AS VARCHAR(50)) AS DiagCode,
             c.Diagnosis, 
             b.Year_of_Birth,
+            d.Order_Desc,
+            d.EVENT_TYPE,
             COUNT(*) AS patient_count
-        FROM [synth].[rde_cds_apc_PCT] a WITH(NOLOCK) 
-        INNER JOIN [synth].[rde_patient_demographics_PCT] b WITH(NOLOCK) 
-        ON a.PERSON_ID = b.PERSON_ID
-        INNER JOIN [synth].[rde_pc_diagnosis_PCT] c WITH(NOLOCK)
-        ON b.PERSON_ID = c.PERSON_ID
+        FROM [tempdb].[dbo].[rde_cds_apc_PCT] a WITH(NOLOCK) 
+        INNER JOIN [tempdb].[dbo].[rde_patient_demographics_PCT] b WITH(NOLOCK) 
+        ON a.Person_ID = b.Person_ID
+        INNER JOIN [tempdb].[dbo].[rde_pc_diagnosis_PCT] c WITH(NOLOCK)
+        ON b.Person_ID = c.Person_ID
+        LEFT JOIN [tempdb].[dbo].[rde_medadmin_PCT] d WITH(NOLOCK)
+        ON b.Person_ID = d.PERSONID
     """
     
     # Build WHERE conditions and parameters
@@ -165,12 +185,31 @@ async def run_select(cohort_definition: CohortDefinition):
         where_conditions.append(f"c.DiagCode NOT IN ({placeholders_nothave})")
         params.extend(mustNOThaveSnomedCodes)
     
+    # Medication filters - only consider 'Administered' medications
+    if musthaveMedications or mustNOThaveMedications:
+        # Add condition to only look at administered medications
+        where_conditions.append("(d.EVENT_TYPE = 'Administered' OR d.EVENT_TYPE IS NULL)")
+    
+    if musthaveMedications:
+        # Build OR conditions for medication names
+        med_conditions = []
+        for med_name in musthaveMedications:
+            med_conditions.append("d.Order_Desc LIKE ?")
+            params.append(f"%{med_name}%")
+        where_conditions.append(f"({' OR '.join(med_conditions)})")
+    
+    if mustNOThaveMedications:
+        # Exclude patients who have these medications
+        for med_name in mustNOThaveMedications:
+            where_conditions.append("(d.Order_Desc NOT LIKE ? OR d.Order_Desc IS NULL)")
+            params.append(f"%{med_name}%")
+    
     # Final query
     where_clause = " AND ".join(where_conditions)
     final_query = f"""
         {base_query}
         WHERE {where_clause}
-        GROUP BY b.Gender, b.Ethnicity, c.DiagCode, a.Adm_Dt, c.Diagnosis, b.Year_of_Birth
+        GROUP BY b.Gender, b.Ethnicity, c.DiagCode, a.Adm_Dt, c.Diagnosis, b.Year_of_Birth, d.Order_Desc, d.EVENT_TYPE
     """
 
     
@@ -187,7 +226,7 @@ async def run_select(cohort_definition: CohortDefinition):
         conn.close()
         
     # Total patients
-    total_patients = df_results["patient_count"].sum()
+    total_patients = df_results["patient_count"].sum() if not df_results.empty else 0
     
     
     # Build aggregated results for frontend
@@ -231,10 +270,25 @@ async def run_select(cohort_definition: CohortDefinition):
         age_min = df_results["Age"].min()
         age_max = df_results["Age"].max()
 
+        # Medication counts - top medications administered
+        medication_counts = []
+        if 'Order_Desc' in df_results.columns:
+            medication_counts = (
+                df_results[df_results['Order_Desc'].notna()]
+                .groupby("Order_Desc")["patient_count"]
+                .sum()
+                .reset_index()
+                .rename(columns={"Order_Desc": "medication", "patient_count": "count"})
+                .sort_values("count", ascending=False)
+                .head(10)  # Top 10 medications
+                .to_dict(orient="records")
+            )
+
         # Raw results
         results_json = df_results.to_dict(orient="records")
     else:
-        gender_counts, age_groups, ethnicity_counts, results_json = [], [], [], []
+        gender_counts, age_groups, ethnicity_counts, medication_counts, results_json = [], [], [], [], []
+        age_min, age_max = 0, 0
 
     
     return {
@@ -245,5 +299,6 @@ async def run_select(cohort_definition: CohortDefinition):
         "genderCounts": gender_counts,
         "ageGroups": age_groups,
         "ethnicityCounts": ethnicity_counts,
+        "medicationCounts": medication_counts,
         "results": results_json
     }
