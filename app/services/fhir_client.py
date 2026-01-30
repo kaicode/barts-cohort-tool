@@ -37,6 +37,11 @@ class FHIRClient:
         url = f"{settings.fhir_api_url}/ValueSet/$expand?url=http://snomed.info/sct?fhir_vs=ecl/{ecl}&filter={term}"
         response = self.session.get(url, headers=self.get_headers(), timeout=60)
         return response.json()
+    
+    def search_snomed_description_id(self, term: str):
+        url = f"{settings.fhir_api_url}/CodeSystem/$lookup?system=http://snomed.info/sct&code={term}&includeDesignations=true"
+        response = self.session.get(url, headers=self.get_headers(), timeout=60)
+        return response.json()
 
     def map_snomed_to_icd10(self, snomed_code):
         source_system = "http://snomed.info/sct"

@@ -23,3 +23,10 @@ async def snomed_count_descendants(code: str):
     # https://confluence.ihtsdotools.org/display/DOCECL/6.11+History+Supplements
     # return client.search_snomed("<<" + code + ' {{ %2B HISTORY }}', "", 1)
     return client.search_snomed("<<" + code, "", 1)
+
+@router.get("/snomed/lookup")
+async def lookup_snomed(code: str):
+    """
+    Returns SNOMED concept details including descriptionId (if supported)
+    """
+    return client.search_snomed_description_id(code)
