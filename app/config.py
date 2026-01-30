@@ -8,6 +8,12 @@ class Settings(BaseSettings):
     dw_connection: str
     saved_searches: str
     sql_query: str
+    sql_query2: str
+    group_by: str
+    sender_email: str
+    smtp_server: str
+    smtp_port: int 
+    app_password: str
 
 
     class Config:

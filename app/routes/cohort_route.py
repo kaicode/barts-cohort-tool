@@ -7,6 +7,14 @@ import app.services.fhir_client as fhir_client
 import pandas as pd
 import os
 import json
+from datetime import datetime
+from pathlib import Path
+import math
+
+
+# from app.services.report_utils import generate_report
+from app.services.email_utils import send_results_email
+from app.services.email_utils import generate_html_report
 
 router = APIRouter()
 client = fhir_client.FHIRClient()
@@ -47,6 +55,7 @@ class TimeRange(BaseModel):
 
 class CohortDefinition(BaseModel):
     title: str
+    email:str
     gender: Union[str, List[CodeEntry]]
     ageRange: AgeRange
     ethnicity: Union[str, List[CodeEntry]]
@@ -62,15 +71,19 @@ def get_snomed_display(code: str) -> str:
     except Exception as e:
         print(f"Error fetching SNOMED display for {code}: {e}")
         return 'Unknown'
+    
+datetime_mail = datetime.now().strftime("%d %B %Y, %H:%M")
+datetime_title = datetime_mail.replace(",", "").replace(":", "_").replace(" ", "_")
+
 
 @router.post("/cohort/select")
 async def run_select(cohort_definition: CohortDefinition):
     output_folder = settings.saved_searches
-    filename = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}.json")
+    filename = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_selected_criteria_{datetime_title}.json")
 
     # Save definition as JSON
     with open(filename, "w") as f:
-        json.dump(cohort_definition.dict(), f, indent=4)
+        json.dump(cohort_definition.dict(), f, indent=4, allow_nan=True)
 
     # Extract demographics
     displays_gender = []
@@ -100,13 +113,16 @@ async def run_select(cohort_definition: CohortDefinition):
         ethnicity_list = [{"code": item.code, "display": item.display} for item in ethnicity]
 
     # Must-have & must-not-have codes
-    musthaveSnomedCodes = []
+    musthaveSnomedCodes = set()  # ensure uniqueness
+
     if cohort_definition.mustHaveFindings:
         for item in cohort_definition.mustHaveFindings:
             if item.codesWithDetails:
                 for detail in item.codesWithDetails:
                     if detail.code:
-                        musthaveSnomedCodes.append(detail.code)
+                        musthaveSnomedCodes.add(detail.code)
+                            
+    mustNOThaveDiagnosisNames = []
     
     mustNOThaveSnomedCodes = []
     if cohort_definition.mustNotHaveFindings:
@@ -115,6 +131,9 @@ async def run_select(cohort_definition: CohortDefinition):
                 for detail in item.codesWithDetails:
                     if detail.code:
                         mustNOThaveSnomedCodes.append(detail.code)
+                    
+                    if detail.display:
+                        mustNOThaveDiagnosisNames.append(detail.display)
     
     # Base SELECT and JOIN statements
     base_query = settings.sql_query
@@ -141,29 +160,33 @@ async def run_select(cohort_definition: CohortDefinition):
         where_conditions.append("a.Adm_Dt >= ? AND a.Adm_Dt <= ?")
         params.extend([start_date, end_date])
     
+    second_query = settings.sql_query2
+    
     if musthaveSnomedCodes:
         placeholders_have = ', '.join(['?'] * len(musthaveSnomedCodes))
-        where_conditions.append(f"c.DiagCode IN ({placeholders_have})")
+        where_conditions.append(f"c.DiagCode IN ({second_query} ({placeholders_have}))")
         params.extend(musthaveSnomedCodes)
     
     if mustNOThaveSnomedCodes:
         placeholders_nothave = ', '.join(['?'] * len(mustNOThaveSnomedCodes))
-        where_conditions.append(f"c.DiagCode NOT IN ({placeholders_nothave})")
+        where_conditions.append(f"c.DiagCode NOT IN ({second_query} ({placeholders_nothave}))")
         params.extend(mustNOThaveSnomedCodes)
     
+    
+    group_by_statem = settings.group_by
     # Final query
     where_clause = " AND ".join(where_conditions)
     final_query = f"""
         {base_query}
         WHERE {where_clause}
-        GROUP BY b.Gender, b.Ethnicity, c.DiagCode, a.Adm_Dt, c.Diagnosis, b.Year_of_Birth
+        GROUP BY {group_by_statem}
     """
 
     print('final query')
     print(final_query)
     
-    print('params')
-    print(params)
+    # print('params')
+    # print(params)
     
     # Run the query
     df_results = pd.DataFrame()
@@ -180,15 +203,26 @@ async def run_select(cohort_definition: CohortDefinition):
     # Total patients
     total_patients = df_results["patient_count"].sum()
     
-    print("Total patients")
-    print(total_patients)
+    # print("Total patients")
+    # print(total_patients)
+    
+    # Adding any included diagnoses with the count of zero
+    # Group by Diagnosis from df_results
+    if not df_results.empty:
+        # Ensure DiagCode is string
+        df_results["DiagCode"] = df_results["DiagCode"].astype(str)
+        
+        # Aggregate counts
+        diag_counts = df_results.groupby("DiagCode")["patient_count"].sum().to_dict()
+    else:
+        diag_counts = {}
 
     
     # Apply disclosure control: if <10, return 0
     if total_patients < 10:
         total_patients = 0
         
-        gender_counts, age_groups, ethnicity_counts, results_json = [], [], [], []
+        gender_counts, age_groups, ethnicity_counts, results_json, admissions_by_month, admissions_by_diagnosis = [], [], [], [], [], []
         
         age_min = "NA"
         age_max = "NA"
@@ -219,7 +253,7 @@ async def run_select(cohort_definition: CohortDefinition):
             
             # Ensure all labels appear even if count is 0
             age_groups = (
-                df_results.groupby("AgeGroup")["patient_count"]
+                df_results.groupby("AgeGroup", observed=True)["patient_count"]
                 .sum()
                 .reindex(labels, fill_value=0)  # <-- reindex ensures missing groups appear with 0
                 .reset_index()
@@ -243,23 +277,208 @@ async def run_select(cohort_definition: CohortDefinition):
             else:
                 age_min = "NA"
                 age_max = "NA"
-
+                
+            # --- Admissions by Month-Year ---
+            df_results["Adm_Dt"] = pd.to_datetime(df_results["Adm_Dt"])
+            df_results["Month_Year"] = df_results["Adm_Dt"].dt.to_period('M').astype(str)
+            
+            admissions_by_month = (
+                df_results.groupby("Month_Year")["patient_count"]
+                .sum()
+                .reset_index()
+                .rename(columns={"Month_Year": "monthYear", "patient_count": "count"})
+                .to_dict(orient="records")
+            )
+            
+            # --- Diagnoses included ---
+            # Ensure DiagCode is string
+            df_results["DiagCode"] = df_results["DiagCode"].astype(str)
+            
+            # Aggregate counts by code
+            diagnoses_included = (
+                df_results.groupby(["DiagCode", "Diagnosis"], as_index=False)["patient_count"]
+                .sum()
+                .reset_index()
+                .rename(columns={"DiagCode": "code", "Diagnosis": "diagnosis", "patient_count": "count"})
+                .to_dict(orient="records")
+            )
+            
+            print(diagnoses_included)
+            
             # Raw results
             results_json = df_results.to_dict(orient="records")
         else:
-            gender_counts, age_groups, ethnicity_counts, results_json = [], [], [], []
+            gender_counts, age_groups, ethnicity_counts, results_json, admissions_by_month, admissions_by_diagnosis = [], [], [], [], [], []
             
             age_min = "NA"
             age_max = "NA"
-
     
-    return {
+    # Build a set of diagnoses already included
+    # print(diagnoses_included)
+    existing_diagnoses = {d["diagnosis"] for d in diagnoses_included}
+    
+    # Build mapping: DISPLAY -> CODE for must-have findings
+    # Build mapping: CODE -> DISPLAY
+    musthave_code_display = {}
+    if cohort_definition.mustHaveFindings:
+        for item in cohort_definition.mustHaveFindings:
+            if item.codesWithDetails:
+                for detail in item.codesWithDetails:
+                    if detail.code:
+                        code = str(detail.code)                  # key = code
+                        display = detail.display or code         # value = display
+                        musthave_code_display[code] = display
+                        
+    print(musthave_code_display)
+    
+    # Build a new list in the correct order
+    ordered_diagnoses = []
+    
+    for code, display in musthave_code_display.items():
+        # Find the existing entry, if any
+        existing_entry = next((e for e in diagnoses_included if str(e["code"]) == code), None)
+        if existing_entry:
+            # Update diagnosis display
+            existing_entry["diagnosis"] = display
+            ordered_diagnoses.append(existing_entry)
+        else:
+            # Add missing entry with count=0
+            ordered_diagnoses.append({"code": code, "diagnosis": display, "count": 0})
+    
+    diagnoses_included = ordered_diagnoses
+            
+    # print(admissions_by_month)
+    
+    results_payload = {
         "title": cohort_definition.title,
+        "email": cohort_definition.email,
         "total_patients": int(total_patients),
         "minAge": age_min,
         "maxAge": age_max,        
         "genderCounts": gender_counts,
         "ageGroups": age_groups,
         "ethnicityCounts": ethnicity_counts,
-        "results": results_json
-    }
+        "admissions_by_month": admissions_by_month,
+        "results": results_json,
+        "date_time_mail": datetime_mail
+        }
+    
+    if musthaveSnomedCodes:
+        results_payload["diagnoses_included"] = diagnoses_included
+       
+    
+    if mustNOThaveSnomedCodes:
+        results_payload["diagnoses_excluded"] = mustNOThaveDiagnosisNames
+    
+    results_payload_4json = {
+        "sql_query": final_query,
+        "title": cohort_definition.title,
+        "email": cohort_definition.email,
+        "total_patients": int(total_patients),       
+        "genderCounts": gender_counts,
+        "ageGroups": age_groups,
+        "ethnicityCounts": ethnicity_counts,
+        "admissions_by_month": admissions_by_month,
+        "diagnoses_included": diagnoses_included,
+        "diagnoses_excluded": mustNOThaveDiagnosisNames
+        }
+
+    def sanitize_for_json(obj):
+        """Recursively replace NaN/inf with None in dicts/lists."""
+        if isinstance(obj, dict):
+            return {k: sanitize_for_json(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [sanitize_for_json(v) for v in obj]
+        elif isinstance(obj, float):
+            if math.isnan(obj) or math.isinf(obj):
+                return None
+        return obj
+    
+    # Apply to both payloads in one line
+    results_payload = sanitize_for_json(results_payload)
+    results_payload_4json = sanitize_for_json(results_payload_4json)
+    
+    # Saving results
+    filename_results = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_results_{datetime_title}.json")
+
+    # Save definition as JSON
+    with open(filename_results, "w") as f:
+        json.dump(results_payload_4json, f, indent=4, allow_nan=True)
+       
+    
+    # Saving HTML
+    filename_results_html = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_results_html_{datetime_title}.html")
+    generate_html_report(results_payload, filename_results_html)
+    print("Saved results to results.json")
+    
+        
+    # Generate HTML + PDF report
+    # filename_pdf = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_{datetime_title}.pdf")
+
+    # html_body, pdf_path = generate_report(results_payload, filename_pdf)
+    # print("PDF generated at:", pdf_path)
+
+    
+    html_email_body = f"""
+        <html>
+          <body style="font-family: Arial, sans-serif; line-height: 1.5;">
+            <p>Dear user,</p>
+        
+            <p>
+              Please find attached the results of the request submitted to the
+              Patient Cohorting Tool on {datetime_mail}.
+            </p>
+            
+            <p>
+              To view the results, please double-click on the attached HTML file.
+              It should automatically open in your default web browser
+              (for example, Google Chrome, Microsoft Edge, or Mozilla Firefox).
+              <br /><br />
+              If the file does not open correctly, please download it to your
+              computer and then open it manually using a web browser.
+            </p>
+        
+            <p>
+              If you have any issues, feedback, or comments, please email the
+              Barts Life Sciences data science team at 
+              <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">
+                bartshealth.bls.cohortingtool@nhs.net.<br />
+              </a>
+            </p>
+            
+            <p>
+              <u>
+              Please do not respond to this email as it is unmonitored.
+              </u>
+            </p>
+        
+            <p>
+              Kind regards,<br />
+              BLS data science team
+            </p>
+          </body>
+        </html>
+        """
+
+
+    # Send results email
+    try:
+        send_results_email(
+            to_email=cohort_definition.email,
+            subject=f"Cohort Results: {cohort_definition.title}",
+            html_body=html_email_body,
+            # pdf_path=None, #pdf_path
+            sender_email=settings.sender_email,
+            smtp_server=settings.smtp_server,
+            smtp_port=settings.smtp_port,
+            app_password=settings.app_password,
+            html_attachment_path=Path(filename_results_html)        
+        )
+        print(f"Results email sent to {cohort_definition.email}")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+
+    # Return JSON to frontend
+    return results_payload
+
+    
