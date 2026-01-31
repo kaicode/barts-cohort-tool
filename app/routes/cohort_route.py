@@ -1,4 +1,5 @@
 from fastapi import APIRouter 
+from fastapi import BackgroundTasks
 from pydantic import BaseModel
 from typing import List, Union, Optional
 import pyodbc
@@ -10,6 +11,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 import math
+from fastapi.concurrency import run_in_threadpool
 
 
 # from app.services.report_utils import generate_report
@@ -76,8 +78,27 @@ datetime_mail = datetime.now().strftime("%d %B %Y, %H:%M")
 datetime_title = datetime_mail.replace(",", "").replace(":", "_").replace(" ", "_")
 
 
-@router.post("/cohort/select")
-async def run_select(cohort_definition: CohortDefinition):
+def fetch_from_db(query, params):
+    """
+    Synchronous function to run a SQL query and return a DataFrame.
+    """
+    df = pd.DataFrame()
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            df = pd.DataFrame.from_records(rows, columns=columns)
+        finally:
+            cursor.close()
+            conn.close()
+    return df
+
+
+
+async def process_cohort(cohort_definition: CohortDefinition):
     output_folder = settings.saved_searches
     filename = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_selected_criteria_{datetime_title}.json")
 
@@ -182,23 +203,15 @@ async def run_select(cohort_definition: CohortDefinition):
         GROUP BY {group_by_statem}
     """
 
-    print('final query')
-    print(final_query)
+    # print('final query')
+    # print(final_query)
     
     # print('params')
     # print(params)
     
     # Run the query
     df_results = pd.DataFrame()
-    conn = get_db_connection()
-    if conn:
-        cursor = conn.cursor()
-        cursor.execute(final_query, params)
-        column_names = [column[0] for column in cursor.description]
-        rows = cursor.fetchall()
-        df_results = pd.DataFrame.from_records(rows, columns=column_names)
-        cursor.close()
-        conn.close()
+    df_results = await run_in_threadpool(fetch_from_db, final_query, params)
         
     # Total patients
     total_patients = df_results["patient_count"].sum()
@@ -303,7 +316,7 @@ async def run_select(cohort_definition: CohortDefinition):
                 .to_dict(orient="records")
             )
             
-            print(diagnoses_included)
+            # print(diagnoses_included)
             
             # Raw results
             results_json = df_results.to_dict(orient="records")
@@ -329,7 +342,7 @@ async def run_select(cohort_definition: CohortDefinition):
                         display = detail.display or code         # value = display
                         musthave_code_display[code] = display
                         
-    print(musthave_code_display)
+    # print(musthave_code_display)
     
     # Build a new list in the correct order
     ordered_diagnoses = []
@@ -480,5 +493,19 @@ async def run_select(cohort_definition: CohortDefinition):
 
     # Return JSON to frontend
     return results_payload
+    pass
+
+
+
+@router.post("/cohort/select")
+async def run_select(cohort_definition: CohortDefinition, background_tasks: BackgroundTasks):
+    background_tasks.add_task(process_cohort, cohort_definition)
+
+    return {
+        "status": "processing",
+        "message": "Your request is being processed in the background. "
+                   "You will receive an email when results are ready."
+    }
+    
 
     
