@@ -104,18 +104,9 @@ class FHIRClient:
     # SNOMED QUERIES
     # ------------------------
     def search_snomed(self, ecl: str, term: str, count: int = 20):
-        url = (
-            f"{settings.fhir_api_url}/ValueSet/$expand?"
-            f"url=http://snomed.info/sct?fhir_vs=ecl/{ecl}&filter={term}&count={count}"
-        )
-        return self._request("GET", url)
-
-    def search_snomed_description_id(self, term: str):
-        url = (
-            f"{settings.fhir_api_url}/CodeSystem/$lookup?"
-            f"system=http://snomed.info/sct&code={term}&includeDesignations=true"
-        )
-        return self._request("GET", url)
+        url = f"{settings.fhir_api_url}/ValueSet/$expand?url=http://snomed.info/sct?fhir_vs=ecl/{ecl}&filter={term}"
+        response = self.session.get(url, headers=self.get_headers(), timeout=60)
+        return response.json()
 
     def map_snomed_to_icd10(self, snomed_code):
         source_system = "http://snomed.info/sct"

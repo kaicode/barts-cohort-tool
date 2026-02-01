@@ -101,10 +101,6 @@ def fetch_from_db(query, params):
 
 async def process_cohort(cohort_definition: CohortDefinition):
     try:
-        print("DICT")
-        print(cohort_definition.dict())
-        print("NO DICT")
-        print(cohort_definition)
         output_folder = settings.saved_searches
         filename = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_selected_criteria_{datetime_title}.json")
 
@@ -237,6 +233,8 @@ async def process_cohort(cohort_definition: CohortDefinition):
             diag_counts = {}
 
         
+        diagnoses_included = []
+        
         # Apply disclosure control: if <10, return 0
         if total_patients < 10:
             total_patients = 0
@@ -333,9 +331,10 @@ async def process_cohort(cohort_definition: CohortDefinition):
                 age_max = "NA"
         
         # Build a set of diagnoses already included
-        # print(diagnoses_included)
-        existing_diagnoses = {d["diagnosis"] for d in diagnoses_included}
-        
+        if diagnoses_included:
+            existing_diagnoses = {d["diagnosis"] for d in diagnoses_included}
+            
+       
         # Build mapping: DISPLAY -> CODE for must-have findings
         # Build mapping: CODE -> DISPLAY
         musthave_code_display = {}
@@ -364,7 +363,8 @@ async def process_cohort(cohort_definition: CohortDefinition):
                 # Add missing entry with count=0
                 ordered_diagnoses.append({"code": code, "diagnosis": display, "count": 0})
         
-        diagnoses_included = ordered_diagnoses
+        diagnoses_included = ordered_diagnoses    
+        
                 
         # print(admissions_by_month)
         
