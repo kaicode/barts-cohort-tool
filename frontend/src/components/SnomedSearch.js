@@ -70,6 +70,10 @@ const SnomedSearch = (args) => {
       <Form.Group className="mb-3">
         <Form.Label>{args.label}</Form.Label>
         <p><i>Start typing to search and add SNOMED terms. Click × to remove.</i></p>
+        <p style={{ fontSize: "0.7em" }}>
+            If the SNOMED terms are not loading, please refresh the page or try again in about five minutes. 
+            If the issue persists, please contact the Barts Life Sciences team using the email provided above.
+        </p>
         <AsyncTypeahead
           id={args.label}
           labelKey="display"

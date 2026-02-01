@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 import math
 from fastapi.concurrency import run_in_threadpool
+import traceback
 
 
 # from app.services.report_utils import generate_report
@@ -99,402 +100,459 @@ def fetch_from_db(query, params):
 
 
 async def process_cohort(cohort_definition: CohortDefinition):
-    output_folder = settings.saved_searches
-    filename = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_selected_criteria_{datetime_title}.json")
+    try:
+        print("DICT")
+        print(cohort_definition.dict())
+        print("NO DICT")
+        print(cohort_definition)
+        output_folder = settings.saved_searches
+        filename = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_selected_criteria_{datetime_title}.json")
 
-    # Save definition as JSON
-    with open(filename, "w") as f:
-        json.dump(cohort_definition.dict(), f, indent=4, allow_nan=True)
+        # Save definition as JSON
+        with open(filename, "w") as f:
+            json.dump(cohort_definition.dict(), f, indent=4, allow_nan=True)
 
-    # Extract demographics
-    displays_gender = []
-    if cohort_definition.gender != 'ALL':
-        displays_gender = [entry.display for entry in cohort_definition.gender]
+        # Extract demographics
+        displays_gender = []
+        if cohort_definition.gender != 'ALL':
+            displays_gender = [entry.display for entry in cohort_definition.gender]
+            
+        displays_ethnicity = []
+        if cohort_definition.ethnicity != 'ALL':
+            displays_ethnicity = [entry.display for entry in cohort_definition.ethnicity]
+
+        minAge = cohort_definition.ageRange.min
+        maxAge = cohort_definition.ageRange.max
+        start_date = cohort_definition.timeRange.start if cohort_definition.timeRange else None
+        end_date = cohort_definition.timeRange.end if cohort_definition.timeRange else None
+
+        # Build gender/ethnicity lists
+        gender = cohort_definition.gender
+        if isinstance(gender, str):
+            gender_list = [{"code": gender, "display": gender}]
+        else:
+            gender_list = [{"code": item.code, "display": item.display} for item in gender]
+
+        ethnicity = cohort_definition.ethnicity
+        if isinstance(ethnicity, str):
+            ethnicity_list = [{"code": ethnicity, "display": ethnicity}]
+        else:
+            ethnicity_list = [{"code": item.code, "display": item.display} for item in ethnicity]
+
+        # Must-have & must-not-have codes
+        musthaveSnomedCodes = set()  # ensure uniqueness
+
+        if cohort_definition.mustHaveFindings:
+            for item in cohort_definition.mustHaveFindings:
+                if item.codesWithDetails:
+                    for detail in item.codesWithDetails:
+                        if detail.code:
+                            musthaveSnomedCodes.add(detail.code)
+                                
+        mustNOThaveDiagnosisNames = []
         
-    displays_ethnicity = []
-    if cohort_definition.ethnicity != 'ALL':
-        displays_ethnicity = [entry.display for entry in cohort_definition.ethnicity]
-
-    minAge = cohort_definition.ageRange.min
-    maxAge = cohort_definition.ageRange.max
-    start_date = cohort_definition.timeRange.start if cohort_definition.timeRange else None
-    end_date = cohort_definition.timeRange.end if cohort_definition.timeRange else None
-
-    # Build gender/ethnicity lists
-    gender = cohort_definition.gender
-    if isinstance(gender, str):
-        gender_list = [{"code": gender, "display": gender}]
-    else:
-        gender_list = [{"code": item.code, "display": item.display} for item in gender]
-
-    ethnicity = cohort_definition.ethnicity
-    if isinstance(ethnicity, str):
-        ethnicity_list = [{"code": ethnicity, "display": ethnicity}]
-    else:
-        ethnicity_list = [{"code": item.code, "display": item.display} for item in ethnicity]
-
-    # Must-have & must-not-have codes
-    musthaveSnomedCodes = set()  # ensure uniqueness
-
-    if cohort_definition.mustHaveFindings:
-        for item in cohort_definition.mustHaveFindings:
-            if item.codesWithDetails:
-                for detail in item.codesWithDetails:
-                    if detail.code:
-                        musthaveSnomedCodes.add(detail.code)
-                            
-    mustNOThaveDiagnosisNames = []
-    
-    mustNOThaveSnomedCodes = []
-    if cohort_definition.mustNotHaveFindings:
-        for item in cohort_definition.mustNotHaveFindings:
-            if item.codesWithDetails:
-                for detail in item.codesWithDetails:
-                    if detail.code:
-                        mustNOThaveSnomedCodes.append(detail.code)
-                    
-                    if detail.display:
-                        mustNOThaveDiagnosisNames.append(detail.display)
-    
-    # Base SELECT and JOIN statements
-    base_query = settings.sql_query
-    
-    # Build WHERE conditions and parameters
-    where_conditions = []
-    params = []
-    
-    if displays_gender:
-        placeholders_gender = ', '.join(['?'] * len(displays_gender))
-        where_conditions.append(f"b.Gender IN ({placeholders_gender})")
-        params.extend(displays_gender)
-    
-    if displays_ethnicity:
-        placeholders_ethnicity = ', '.join(['?'] * len(displays_ethnicity))
-        where_conditions.append(f"b.Ethnicity IN ({placeholders_ethnicity})")
-        params.extend(displays_ethnicity)
-    
-    # Age range condition
-    where_conditions.append("(YEAR(GETDATE()) - b.Year_of_Birth) BETWEEN ? AND ?")
-    params.extend([minAge, maxAge])
-    
-    if start_date and end_date:
-        where_conditions.append("a.Adm_Dt >= ? AND a.Adm_Dt <= ?")
-        params.extend([start_date, end_date])
-    
-    second_query = settings.sql_query2
-    
-    if musthaveSnomedCodes:
-        placeholders_have = ', '.join(['?'] * len(musthaveSnomedCodes))
-        where_conditions.append(f"c.DiagCode IN ({second_query} ({placeholders_have}))")
-        params.extend(musthaveSnomedCodes)
-    
-    if mustNOThaveSnomedCodes:
-        placeholders_nothave = ', '.join(['?'] * len(mustNOThaveSnomedCodes))
-        where_conditions.append(f"c.DiagCode NOT IN ({second_query} ({placeholders_nothave}))")
-        params.extend(mustNOThaveSnomedCodes)
-    
-    
-    group_by_statem = settings.group_by
-    # Final query
-    where_clause = " AND ".join(where_conditions)
-    final_query = f"""
-        {base_query}
-        WHERE {where_clause}
-        GROUP BY {group_by_statem}
-    """
-
-    # print('final query')
-    # print(final_query)
-    
-    # print('params')
-    # print(params)
-    
-    # Run the query
-    df_results = pd.DataFrame()
-    df_results = await run_in_threadpool(fetch_from_db, final_query, params)
+        mustNOThaveSnomedCodes = []
+        if cohort_definition.mustNotHaveFindings:
+            for item in cohort_definition.mustNotHaveFindings:
+                if item.codesWithDetails:
+                    for detail in item.codesWithDetails:
+                        if detail.code:
+                            mustNOThaveSnomedCodes.append(detail.code)
+                        
+                        if detail.display:
+                            mustNOThaveDiagnosisNames.append(detail.display)
         
-    # Total patients
-    total_patients = df_results["patient_count"].sum()
-    
-    # print("Total patients")
-    # print(total_patients)
-    
-    # Adding any included diagnoses with the count of zero
-    # Group by Diagnosis from df_results
-    if not df_results.empty:
-        # Ensure DiagCode is string
-        df_results["DiagCode"] = df_results["DiagCode"].astype(str)
+        # Base SELECT and JOIN statements
+        base_query = settings.sql_query
         
-        # Aggregate counts
-        diag_counts = df_results.groupby("DiagCode")["patient_count"].sum().to_dict()
-    else:
-        diag_counts = {}
+        # Build WHERE conditions and parameters
+        where_conditions = []
+        params = []
+        
+        if displays_gender:
+            placeholders_gender = ', '.join(['?'] * len(displays_gender))
+            where_conditions.append(f"b.Gender IN ({placeholders_gender})")
+            params.extend(displays_gender)
+        
+        if displays_ethnicity:
+            placeholders_ethnicity = ', '.join(['?'] * len(displays_ethnicity))
+            where_conditions.append(f"b.Ethnicity IN ({placeholders_ethnicity})")
+            params.extend(displays_ethnicity)
+        
+        # Age range condition
+        where_conditions.append("(YEAR(GETDATE()) - b.Year_of_Birth) BETWEEN ? AND ?")
+        params.extend([minAge, maxAge])
+        
+        if start_date and end_date:
+            where_conditions.append("a.Adm_Dt >= ? AND a.Adm_Dt <= ?")
+            params.extend([start_date, end_date])
+        
+        second_query = settings.sql_query2
+        
+        if musthaveSnomedCodes:
+            placeholders_have = ', '.join(['?'] * len(musthaveSnomedCodes))
+            where_conditions.append(f"c.DiagCode IN ({second_query} ({placeholders_have}))")
+            params.extend(musthaveSnomedCodes)
+        
+        if mustNOThaveSnomedCodes:
+            placeholders_nothave = ', '.join(['?'] * len(mustNOThaveSnomedCodes))
+            where_conditions.append(f"c.DiagCode NOT IN ({second_query} ({placeholders_nothave}))")
+            params.extend(mustNOThaveSnomedCodes)
+        
+        
+        group_by_statem = settings.group_by
+        # Final query
+        where_clause = " AND ".join(where_conditions)
+        final_query = f"""
+            {base_query}
+            WHERE {where_clause}
+            GROUP BY {group_by_statem}
+        """
 
-    
-    # Apply disclosure control: if <10, return 0
-    if total_patients < 10:
-        total_patients = 0
+        # print('final query')
+        # print(final_query)
         
-        gender_counts, age_groups, ethnicity_counts, results_json, admissions_by_month, admissions_by_diagnosis = [], [], [], [], [], []
+        # print('params')
+        # print(params)
         
-        age_min = "NA"
-        age_max = "NA"
+        # Run the query
+        df_results = pd.DataFrame()
+        df_results = await run_in_threadpool(fetch_from_db, final_query, params)
+            
+        # Total patients
+        total_patients = df_results["patient_count"].sum()
         
-    else:
-        # Build aggregated results for frontend
+        # print("Total patients")
+        # print(total_patients)
+        
+        # Adding any included diagnoses with the count of zero
+        # Group by Diagnosis from df_results
         if not df_results.empty:
             # Ensure DiagCode is string
             df_results["DiagCode"] = df_results["DiagCode"].astype(str)
-
-            # Gender counts
-            gender_counts = (
-                df_results.groupby("Gender")["patient_count"]
-                .sum()
-                .reset_index()
-                .rename(columns={"Gender": "gender", "patient_count": "count"})
-                .to_dict(orient="records")
-            )
-
-            # Age groups (bucket by decades)
-            current_year = pd.to_datetime("today").year
-            df_results["Age"] = current_year - df_results["Year_of_Birth"]
             
-            bins = [18, 30, 40, 50, 60, 70, 80, 90, 100, float("inf")]
-            labels = ["18-29","30-39","40-49","50-59","60-69","70-79","80-89","90-99","100+"]
-            
-            df_results["AgeGroup"] = pd.cut(df_results["Age"], bins=bins, labels=labels, right=False)
-            
-            # Ensure all labels appear even if count is 0
-            age_groups = (
-                df_results.groupby("AgeGroup", observed=True)["patient_count"]
-                .sum()
-                .reindex(labels, fill_value=0)  # <-- reindex ensures missing groups appear with 0
-                .reset_index()
-                .rename(columns={"AgeGroup": "range", "patient_count": "count"})
-                .to_dict(orient="records")
-            )
-
-            # Ethnicity counts
-            ethnicity_counts = (
-                df_results.groupby("Ethnicity")["patient_count"]
-                .sum()
-                .reset_index()
-                .rename(columns={"Ethnicity": "ethnicity", "patient_count": "count"})
-                .to_dict(orient="records")
-            )
-            
-            # Overall age range
-            if df_results["Age"].notna().any():
-                age_min = int(df_results["Age"].min(skipna=True))
-                age_max = int(df_results["Age"].max(skipna=True))
-            else:
-                age_min = "NA"
-                age_max = "NA"
-                
-            # --- Admissions by Month-Year ---
-            df_results["Adm_Dt"] = pd.to_datetime(df_results["Adm_Dt"])
-            df_results["Month_Year"] = df_results["Adm_Dt"].dt.to_period('M').astype(str)
-            
-            admissions_by_month = (
-                df_results.groupby("Month_Year")["patient_count"]
-                .sum()
-                .reset_index()
-                .rename(columns={"Month_Year": "monthYear", "patient_count": "count"})
-                .to_dict(orient="records")
-            )
-            
-            # --- Diagnoses included ---
-            # Ensure DiagCode is string
-            df_results["DiagCode"] = df_results["DiagCode"].astype(str)
-            
-            # Aggregate counts by code
-            diagnoses_included = (
-                df_results.groupby(["DiagCode", "Diagnosis"], as_index=False)["patient_count"]
-                .sum()
-                .reset_index()
-                .rename(columns={"DiagCode": "code", "Diagnosis": "diagnosis", "patient_count": "count"})
-                .to_dict(orient="records")
-            )
-            
-            # print(diagnoses_included)
-            
-            # Raw results
-            results_json = df_results.to_dict(orient="records")
+            # Aggregate counts
+            diag_counts = df_results.groupby("DiagCode")["patient_count"].sum().to_dict()
         else:
+            diag_counts = {}
+
+        
+        # Apply disclosure control: if <10, return 0
+        if total_patients < 10:
+            total_patients = 0
+            
             gender_counts, age_groups, ethnicity_counts, results_json, admissions_by_month, admissions_by_diagnosis = [], [], [], [], [], []
             
             age_min = "NA"
             age_max = "NA"
-    
-    # Build a set of diagnoses already included
-    # print(diagnoses_included)
-    existing_diagnoses = {d["diagnosis"] for d in diagnoses_included}
-    
-    # Build mapping: DISPLAY -> CODE for must-have findings
-    # Build mapping: CODE -> DISPLAY
-    musthave_code_display = {}
-    if cohort_definition.mustHaveFindings:
-        for item in cohort_definition.mustHaveFindings:
-            if item.codesWithDetails:
-                for detail in item.codesWithDetails:
-                    if detail.code:
-                        code = str(detail.code)                  # key = code
-                        display = detail.display or code         # value = display
-                        musthave_code_display[code] = display
-                        
-    # print(musthave_code_display)
-    
-    # Build a new list in the correct order
-    ordered_diagnoses = []
-    
-    for code, display in musthave_code_display.items():
-        # Find the existing entry, if any
-        existing_entry = next((e for e in diagnoses_included if str(e["code"]) == code), None)
-        if existing_entry:
-            # Update diagnosis display
-            existing_entry["diagnosis"] = display
-            ordered_diagnoses.append(existing_entry)
+            
         else:
-            # Add missing entry with count=0
-            ordered_diagnoses.append({"code": code, "diagnosis": display, "count": 0})
-    
-    diagnoses_included = ordered_diagnoses
+            # Build aggregated results for frontend
+            if not df_results.empty:
+                # Ensure DiagCode is string
+                df_results["DiagCode"] = df_results["DiagCode"].astype(str)
+
+                # Gender counts
+                gender_counts = (
+                    df_results.groupby("Gender")["patient_count"]
+                    .sum()
+                    .reset_index()
+                    .rename(columns={"Gender": "gender", "patient_count": "count"})
+                    .to_dict(orient="records")
+                )
+
+                # Age groups (bucket by decades)
+                current_year = pd.to_datetime("today").year
+                df_results["Age"] = current_year - df_results["Year_of_Birth"]
+                
+                bins = [18, 30, 40, 50, 60, 70, 80, 90, 100, float("inf")]
+                labels = ["18-29","30-39","40-49","50-59","60-69","70-79","80-89","90-99","100+"]
+                
+                df_results["AgeGroup"] = pd.cut(df_results["Age"], bins=bins, labels=labels, right=False)
+                
+                # Ensure all labels appear even if count is 0
+                age_groups = (
+                    df_results.groupby("AgeGroup", observed=True)["patient_count"]
+                    .sum()
+                    .reindex(labels, fill_value=0)  # <-- reindex ensures missing groups appear with 0
+                    .reset_index()
+                    .rename(columns={"AgeGroup": "range", "patient_count": "count"})
+                    .to_dict(orient="records")
+                )
+
+                # Ethnicity counts
+                ethnicity_counts = (
+                    df_results.groupby("Ethnicity")["patient_count"]
+                    .sum()
+                    .reset_index()
+                    .rename(columns={"Ethnicity": "ethnicity", "patient_count": "count"})
+                    .to_dict(orient="records")
+                )
+                
+                # Overall age range
+                if df_results["Age"].notna().any():
+                    age_min = int(df_results["Age"].min(skipna=True))
+                    age_max = int(df_results["Age"].max(skipna=True))
+                else:
+                    age_min = "NA"
+                    age_max = "NA"
+                    
+                # --- Admissions by Month-Year ---
+                df_results["Adm_Dt"] = pd.to_datetime(df_results["Adm_Dt"])
+                df_results["Month_Year"] = df_results["Adm_Dt"].dt.to_period('M').astype(str)
+                
+                admissions_by_month = (
+                    df_results.groupby("Month_Year")["patient_count"]
+                    .sum()
+                    .reset_index()
+                    .rename(columns={"Month_Year": "monthYear", "patient_count": "count"})
+                    .to_dict(orient="records")
+                )
+                
+                # --- Diagnoses included ---
+                # Ensure DiagCode is string
+                df_results["DiagCode"] = df_results["DiagCode"].astype(str)
+                
+                # Aggregate counts by code
+                diagnoses_included = (
+                    df_results.groupby(["DiagCode", "Diagnosis"], as_index=False)["patient_count"]
+                    .sum()
+                    .reset_index()
+                    .rename(columns={"DiagCode": "code", "Diagnosis": "diagnosis", "patient_count": "count"})
+                    .to_dict(orient="records")
+                )
+                
+                # print(diagnoses_included)
+                
+                # Raw results
+                results_json = df_results.to_dict(orient="records")
+            else:
+                gender_counts, age_groups, ethnicity_counts, results_json, admissions_by_month, admissions_by_diagnosis = [], [], [], [], [], []
+                
+                age_min = "NA"
+                age_max = "NA"
+        
+        # Build a set of diagnoses already included
+        # print(diagnoses_included)
+        existing_diagnoses = {d["diagnosis"] for d in diagnoses_included}
+        
+        # Build mapping: DISPLAY -> CODE for must-have findings
+        # Build mapping: CODE -> DISPLAY
+        musthave_code_display = {}
+        if cohort_definition.mustHaveFindings:
+            for item in cohort_definition.mustHaveFindings:
+                if item.codesWithDetails:
+                    for detail in item.codesWithDetails:
+                        if detail.code:
+                            code = str(detail.code)                  # key = code
+                            display = detail.display or code         # value = display
+                            musthave_code_display[code] = display
+                            
+        # print(musthave_code_display)
+        
+        # Build a new list in the correct order
+        ordered_diagnoses = []
+        
+        for code, display in musthave_code_display.items():
+            # Find the existing entry, if any
+            existing_entry = next((e for e in diagnoses_included if str(e["code"]) == code), None)
+            if existing_entry:
+                # Update diagnosis display
+                existing_entry["diagnosis"] = display
+                ordered_diagnoses.append(existing_entry)
+            else:
+                # Add missing entry with count=0
+                ordered_diagnoses.append({"code": code, "diagnosis": display, "count": 0})
+        
+        diagnoses_included = ordered_diagnoses
+                
+        # print(admissions_by_month)
+        
+        results_payload = {
+            "title": cohort_definition.title,
+            "email": cohort_definition.email,
+            "total_patients": int(total_patients),
+            "minAge": age_min,
+            "maxAge": age_max,        
+            "genderCounts": gender_counts,
+            "ageGroups": age_groups,
+            "ethnicityCounts": ethnicity_counts,
+            "admissions_by_month": admissions_by_month,
+            "results": results_json,
+            "date_time_mail": datetime_mail
+            }
+        
+        if musthaveSnomedCodes:
+            results_payload["diagnoses_included"] = diagnoses_included
+           
+        
+        if mustNOThaveSnomedCodes:
+            results_payload["diagnoses_excluded"] = mustNOThaveDiagnosisNames
+        
+        results_payload_4json = {
+            "sql_query": final_query,
+            "title": cohort_definition.title,
+            "email": cohort_definition.email,
+            "total_patients": int(total_patients),       
+            "genderCounts": gender_counts,
+            "ageGroups": age_groups,
+            "ethnicityCounts": ethnicity_counts,
+            "admissions_by_month": admissions_by_month,
+            "diagnoses_included": diagnoses_included,
+            "diagnoses_excluded": mustNOThaveDiagnosisNames
+            }
+
+        def sanitize_for_json(obj):
+            """Recursively replace NaN/inf with None in dicts/lists."""
+            if isinstance(obj, dict):
+                return {k: sanitize_for_json(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [sanitize_for_json(v) for v in obj]
+            elif isinstance(obj, float):
+                if math.isnan(obj) or math.isinf(obj):
+                    return None
+            return obj
+        
+        # Apply to both payloads in one line
+        results_payload = sanitize_for_json(results_payload)
+        results_payload_4json = sanitize_for_json(results_payload_4json)
+        
+        # Saving results
+        filename_results = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_results_{datetime_title}.json")
+
+        # Save definition as JSON
+        with open(filename_results, "w") as f:
+            json.dump(results_payload_4json, f, indent=4, allow_nan=True)
+           
+        
+        # Saving HTML
+        filename_results_html = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_results_html_{datetime_title}.html")
+        generate_html_report(results_payload, filename_results_html)
+        print("Saved results to results.json")
+        
             
-    # print(admissions_by_month)
-    
-    results_payload = {
-        "title": cohort_definition.title,
-        "email": cohort_definition.email,
-        "total_patients": int(total_patients),
-        "minAge": age_min,
-        "maxAge": age_max,        
-        "genderCounts": gender_counts,
-        "ageGroups": age_groups,
-        "ethnicityCounts": ethnicity_counts,
-        "admissions_by_month": admissions_by_month,
-        "results": results_json,
-        "date_time_mail": datetime_mail
-        }
-    
-    if musthaveSnomedCodes:
-        results_payload["diagnoses_included"] = diagnoses_included
-       
-    
-    if mustNOThaveSnomedCodes:
-        results_payload["diagnoses_excluded"] = mustNOThaveDiagnosisNames
-    
-    results_payload_4json = {
-        "sql_query": final_query,
-        "title": cohort_definition.title,
-        "email": cohort_definition.email,
-        "total_patients": int(total_patients),       
-        "genderCounts": gender_counts,
-        "ageGroups": age_groups,
-        "ethnicityCounts": ethnicity_counts,
-        "admissions_by_month": admissions_by_month,
-        "diagnoses_included": diagnoses_included,
-        "diagnoses_excluded": mustNOThaveDiagnosisNames
-        }
+        # Generate HTML + PDF report
+        # filename_pdf = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_{datetime_title}.pdf")
 
-    def sanitize_for_json(obj):
-        """Recursively replace NaN/inf with None in dicts/lists."""
-        if isinstance(obj, dict):
-            return {k: sanitize_for_json(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [sanitize_for_json(v) for v in obj]
-        elif isinstance(obj, float):
-            if math.isnan(obj) or math.isinf(obj):
-                return None
-        return obj
-    
-    # Apply to both payloads in one line
-    results_payload = sanitize_for_json(results_payload)
-    results_payload_4json = sanitize_for_json(results_payload_4json)
-    
-    # Saving results
-    filename_results = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_results_{datetime_title}.json")
+        # html_body, pdf_path = generate_report(results_payload, filename_pdf)
+        # print("PDF generated at:", pdf_path)
 
-    # Save definition as JSON
-    with open(filename_results, "w") as f:
-        json.dump(results_payload_4json, f, indent=4, allow_nan=True)
-       
-    
-    # Saving HTML
-    filename_results_html = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_results_html_{datetime_title}.html")
-    generate_html_report(results_payload, filename_results_html)
-    print("Saved results to results.json")
-    
         
-    # Generate HTML + PDF report
-    # filename_pdf = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_{datetime_title}.pdf")
-
-    # html_body, pdf_path = generate_report(results_payload, filename_pdf)
-    # print("PDF generated at:", pdf_path)
-
-    
-    html_email_body = f"""
-        <html>
-          <body style="font-family: Arial, sans-serif; line-height: 1.5;">
-            <p>Dear user,</p>
-        
-            <p>
-              Please find attached the results of the request submitted to the
-              Patient Cohorting Tool on {datetime_mail}.
-            </p>
+        html_email_body = f"""
+            <html>
+              <body style="font-family: Arial, sans-serif; line-height: 1.5;">
+                <p>Dear user,</p>
             
-            <p>
-              To view the results, please double-click on the attached HTML file.
-              It should automatically open in your default web browser
-              (for example, Google Chrome, Microsoft Edge, or Mozilla Firefox).
-              <br /><br />
-              If the file does not open correctly, please download it to your
-              computer and then open it manually using a web browser.
-            </p>
-        
-            <p>
-              If you have any issues, feedback, or comments, please email the
-              Barts Life Sciences data science team at 
-              <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">
-                bartshealth.bls.cohortingtool@nhs.net.<br />
-              </a>
-            </p>
+                <p>
+                  Please find attached the results of the request submitted to the
+                  Patient Cohorting Tool on {datetime_mail}.
+                </p>
+                
+                <p>
+                  To view the results, please double-click on the attached HTML file.
+                  It should automatically open in your default web browser
+                  (for example, Google Chrome, Microsoft Edge, or Mozilla Firefox).
+                  <br /><br />
+                  If the file does not open correctly, please download it to your
+                  computer and then open it manually using a web browser.
+                </p>
             
-            <p>
-              <u>
-              Please do not respond to this email as it is unmonitored.
-              </u>
-            </p>
-        
-            <p>
-              Kind regards,<br />
-              BLS data science team
-            </p>
-          </body>
-        </html>
-        """
+                <p>
+                  If you have any issues, feedback, or comments, please email the
+                  Barts Life Sciences data science team at 
+                  <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">
+                    bartshealth.bls.cohortingtool@nhs.net.<br />
+                  </a>
+                </p>
+                
+                <p>
+                  <u>
+                  Please do not respond to this email as it is unmonitored.
+                  </u>
+                </p>
+            
+                <p>
+                  Kind regards,<br />
+                  BLS data science team
+                </p>
+              </body>
+            </html>
+            """
+    
+        # Send results email
+        try:
+            send_results_email(
+                to_email=cohort_definition.email,
+                subject=f"Cohort Results: {cohort_definition.title}",
+                html_body=html_email_body,
+                # pdf_path=None, #pdf_path
+                sender_email=settings.sender_email,
+                smtp_server=settings.smtp_server,
+                smtp_port=settings.smtp_port,
+                app_password=settings.app_password,
+                html_attachment_path=Path(filename_results_html)        
+            )
+            print(f"Results email sent to {cohort_definition.email}")
+        except Exception as e:
+            print(f"Failed to send email: {e}")
 
+        # Return JSON to frontend
+        return results_payload
+        pass
 
-    # Send results email
-    try:
-        send_results_email(
-            to_email=cohort_definition.email,
-            subject=f"Cohort Results: {cohort_definition.title}",
-            html_body=html_email_body,
-            # pdf_path=None, #pdf_path
-            sender_email=settings.sender_email,
-            smtp_server=settings.smtp_server,
-            smtp_port=settings.smtp_port,
-            app_password=settings.app_password,
-            html_attachment_path=Path(filename_results_html)        
-        )
-        print(f"Results email sent to {cohort_definition.email}")
     except Exception as e:
-        print(f"Failed to send email: {e}")
-
-    # Return JSON to frontend
-    return results_payload
-    pass
-
+        try:
+            
+            error_trace = traceback.format_exc()
+            
+            html_email_body = f"""
+                <html>
+                  <body style="font-family: Arial, sans-serif; line-height: 1.5;">
+                    <p>Dear BLS cohorting tool team,</p>
+                
+                    <p>
+                      The patient cohorting request titled 
+                      <b>{cohort_definition.title}</b> (submitted by <b>{cohort_definition.email}</b> on {datetime_title})
+                      has <span style="color:red;"><b>failed</b></span> during processing.
+                    </p>
+                
+                    <p>
+                      The error encountered was:
+                      <br/>
+                      <pre style="background:#f6f6f6; padding:10px; border-radius:5px; white-space:pre-wrap;">
+                      {error_trace}
+                      </pre>
+                    </p>
+                
+                    <p>
+                      The cohort definition used for this request has been attached to this email
+                      as a JSON file for debugging.
+                    </p>
+                
+                    <p>
+                      Kind regards,<br/>
+                      BLS Cohorting Tool Automated System
+                    </p>
+                  </body>
+                </html>
+                """
+                
+            send_results_email(
+                to_email="bartshealth.bls.cohortingtool@nhs.net",
+                subject="Cohort Submission: {cohort_definition.title} - Failed Request",
+                html_body=html_email_body,
+                # pdf_path=None, #pdf_path
+                sender_email=settings.sender_email,
+                smtp_server=settings.smtp_server,
+                smtp_port=settings.smtp_port,
+                app_password=settings.app_password,
+                html_attachment_path=Path(filename)        
+            )
+            print("Email with errors sent")
+         
+          
+        except Exception as e:
+            print(f"Failed to send email: {e}")
 
 
 @router.post("/cohort/select")

@@ -236,6 +236,6 @@ def send_results_email(
         with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
             server.login(sender_email, app_password)
             server.send_message(msg)
-        print(f"Email sent successfully to {to_email}")
+        # print(f"Email sent successfully to {to_email}")
     except Exception as e:
         print(f"Failed to send email: {e}")
