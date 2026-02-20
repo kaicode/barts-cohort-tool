@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     smtp_server: str
     smtp_port: int 
     app_password: str
-
+    queue_data_path: str = "./queue_data"
+    worker_count: int = 2
 
     class Config:
         env_file = ".env"

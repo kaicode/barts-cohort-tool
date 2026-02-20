@@ -21,3 +21,4 @@ urllib3==2.3.0
 uvicorn==0.34.0
 httpx~=0.28.1
 pdfkit==1.0.0
+persist-queue==0.8.1
