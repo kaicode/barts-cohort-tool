@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     smtp_server: str
     smtp_port: int 
     app_password: str
+    failure_email: str
 
 
     class Config:

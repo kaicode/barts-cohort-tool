@@ -490,10 +490,59 @@ async def process_cohort(cohort_definition: CohortDefinition):
                 smtp_server=settings.smtp_server,
                 smtp_port=settings.smtp_port,
                 app_password=settings.app_password,
+                email_failure=settings.failure_email,
                 html_attachment_path=Path(filename_results_html)        
             )
             print(f"Results email sent to {cohort_definition.email}")
         except Exception as e:
+            
+            error_trace = traceback.format_exc()
+            
+            html_email_body = f"""
+                <html>
+                  <body style="font-family: Arial, sans-serif; line-height: 1.5;">
+                    <p>Dear BLS cohorting tool team,</p>
+                
+                    <p>
+                      The patient cohorting request titled 
+                      <b>{cohort_definition.title}</b> (submitted by <b>{cohort_definition.email}</b> on {datetime_title})
+                      has <span style="color:red;"><b>failed</b></span> during processing.
+                    </p>
+                
+                    <p>
+                      The error encountered was:
+                      <br/>
+                      <pre style="background:#f6f6f6; padding:10px; border-radius:5px; white-space:pre-wrap;">
+                      {error_trace}
+                      </pre>
+                    </p>
+                
+                    <p>
+                      The cohort definition used for this request has been attached to this email
+                      as a JSON file for debugging.
+                    </p>
+                
+                    <p>
+                      Kind regards,<br/>
+                      BLS Cohorting Tool Automated System
+                    </p>
+                  </body>
+                </html>
+                """
+                
+            send_results_email(
+                to_email=settings.failure_email,
+                subject="Cohort Submission: {cohort_definition.title} - Failed Request",
+                html_body=html_email_body,
+                # pdf_path=None, #pdf_path
+                sender_email=settings.sender_email,
+                smtp_server=settings.smtp_server,
+                smtp_port=settings.smtp_port,
+                app_password=settings.app_password,
+                email_failure=settings.failure_email,
+                html_attachment_path=Path(filename)        
+            )
+         
             print(f"Failed to send email: {e}")
 
         # Return JSON to frontend
@@ -538,7 +587,7 @@ async def process_cohort(cohort_definition: CohortDefinition):
                 """
                 
             send_results_email(
-                to_email="bartshealth.bls.cohortingtool@nhs.net",
+                to_email=settings.failure_email,
                 subject="Cohort Submission: {cohort_definition.title} - Failed Request",
                 html_body=html_email_body,
                 # pdf_path=None, #pdf_path
@@ -546,6 +595,7 @@ async def process_cohort(cohort_definition: CohortDefinition):
                 smtp_server=settings.smtp_server,
                 smtp_port=settings.smtp_port,
                 app_password=settings.app_password,
+                email_failure=settings.failure_email,
                 html_attachment_path=Path(filename)        
             )
             print("Email with errors sent")
