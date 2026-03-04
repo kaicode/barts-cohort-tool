@@ -301,94 +301,238 @@ function CohortForm() {
 }
 
 // --- Results Page ---
+// --- Results Page ---
+const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#AA336A"];
+
 function ResultsPage() {
   const savedResults = sessionStorage.getItem("resultsData");
   const results = savedResults ? JSON.parse(savedResults) : null;
 
   if (!results) return <p>No results to display.</p>;
 
-  const genderData = results.genderCounts || [];
-  const ageData = results.ageGroups || [];
-  const ethnicityData = results.ethnicityCounts || [];
-  const topDiagnoses = results.topDiagnoses || [];
-
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AA336A'];
+  const {
+    title,
+    total_patients,
+    minAge,
+    maxAge,
+    genderCounts = [],
+    ageGroups = [],
+    ethnicityCounts = [],
+    admissions_by_month = [],
+    diagnoses_included = [],
+    diagnoses_excluded = []
+  } = results;
 
   return (
-    <div style={{ margin: '20px', maxWidth: '900px' }}>
-      <h1>Results for {results.title || "Untitled"}</h1>
-    
-      {/* Cohort Summary */}
-      <div style={{ marginBottom: '20px' }}>
-        <h4>Cohort Summary</h4>
-        <p style={{ marginTop: '10px' }}>Total Patients: {results.total_patients || 0}</p>
-        {!results.total_patients && (
-          <p style={{ color: "red", fontStyle: "italic" }}>No results to display</p>
-        )}        
-      </div>
-    
-      {/* Only show charts if patients exist */}
-      {results.total_patients > 0 && (
-        <>
-          {/* <p>Unique Diagnoses: {results.uniqueDiagnoses || 0}</p> */}
-          {/* <p>Age Range: {results.minAge || '-'} - {results.maxAge || '-'}</p> */} 
-            
-          {/* Gender Distribution */}
-          <h3>Gender Distribution</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={genderData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="gender" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="count" fill="#8884d8" />
-            </BarChart>
-          </ResponsiveContainer>
-    
-          {/* Age Distribution */}
-          <h3>Age Distribution</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={ageData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="range" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="count" fill="#82ca9d" />
-            </BarChart>
-          </ResponsiveContainer>
-    
-          {/* Ethnicity Distribution */}
-          <h3 style={{ marginBottom: '20px' }}>Ethnicity Distribution</h3>
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: "40px" }}>
-            <PieChart width={600} height={350}>
-              <Pie
-                data={ethnicityData}
-                dataKey="count"
-                nameKey="ethnicity"
-                cx="50%"
-                cy="55%"
-                outerRadius={120}
-                fill="#8884d8"
-                label
-              >
-                {ethnicityData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend verticalAlign="bottom" height={36} />
-            </PieChart>
-          </div>
+    <div style={{ margin: "20px", maxWidth: "1000px" }}>
+      <h1>Results for {title || "Untitled"}</h1>
 
-          {/* Raw JSON (commented out) */}
-          {/*
-          <section>
-            <h3>Raw Data (JSON)</h3>
-            <pre>{JSON.stringify(results, null, 2)}</pre>
-          </section>
-          */}
+      {/* Cohort Summary */}
+      <div style={{ marginBottom: "20px" }}>
+        <h4>Cohort Summary</h4>
+        <p>Total Patients: {total_patients || 0}</p>
+                
+        {!total_patients && (
+          <p style={{ color: "red", fontStyle: "italic" }}>No results to display</p>
+        )}
+      </div>
+
+      {/* Only show charts if patients exist */}
+      {total_patients > 0 && (
+        <>
+          {/* Gender Distribution */}
+          {genderCounts.length > 0 && (
+            <>
+              <h3>Gender Distribution</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={genderCounts}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="gender" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="count" fill="#8884d8" />
+                </BarChart>
+              </ResponsiveContainer>
+              <table
+                  style={{
+                    width: "100%",
+                    marginTop: "10px",
+                    borderCollapse: "collapse",
+                    border: "1px solid black"
+                  }}
+                >
+                  <thead>
+                    <tr>
+                      <th style={{ border: "1px solid black", padding: "6px" }}>Gender</th>
+                      <th style={{ border: "1px solid black", padding: "6px" }}>Count</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {genderCounts.map((g) => (
+                      <tr key={g.gender}>
+                        <td style={{ border: "1px solid black", padding: "6px" }}>{g.gender}</td>
+                        <td style={{ border: "1px solid black", padding: "6px" }}>{g.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+            </>
+          )}
+          
+          <div style={{ marginTop: "60px" }}></div>
+          
+          {/* Age Distribution */}
+          {ageGroups.length > 0 && (
+            <>
+              <h3>Age Distribution</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={ageGroups}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="range" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="count" fill="#82ca9d" />
+                </BarChart>
+              </ResponsiveContainer>
+              <table style={{ width: "100%", marginTop: "10px", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={{ border: "1px solid black", padding: "6px" }}>Age Range</th>
+                    <th style={{ border: "1px solid black", padding: "6px" }}>Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ageGroups.map((a) => (
+                    <tr key={a.range}>
+                      <td style={{ border: "1px solid black", padding: "6px" }}>{a.range}</td>
+                      <td style={{ border: "1px solid black", padding: "6px" }}>{a.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+          
+          <div style={{ marginTop: "60px" }}></div>
+          
+          {/* Ethnicity Distribution */}
+          {ethnicityCounts.length > 0 && (
+            <>
+              <h3>Ethnicity Distribution</h3>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: "20px" }}>
+                <PieChart width={600} height={350}>
+                  <Pie
+                    data={ethnicityCounts}
+                    dataKey="count"
+                    nameKey="ethnicity"
+                    cx="50%"
+                    cy="55%"
+                    outerRadius={120}
+                    label
+                  >
+                    {ethnicityCounts.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend verticalAlign="bottom" height={36} />
+                </PieChart>
+              </div>
+              <div style={{ marginTop: "20px" }}>
+                  <table style={{ width: "100%", marginTop: "180px", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr>
+                        <th style={{ border: "1px solid black", padding: "6px" }}>Ethnicity</th>
+                        <th style={{ border: "1px solid black", padding: "6px" }}>Count</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ethnicityCounts.map((e) => (
+                        <tr key={e.ethnicity}>
+                          <td style={{ border: "1px solid black", padding: "6px" }}>{e.ethnicity}</td>
+                          <td style={{ border: "1px solid black", padding: "6px" }}>{e.count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+              </div>
+            </>
+          )}
+          
+          <div style={{ marginTop: "60px" }}></div>
+          
+          {/* Admissions by Month-Year */}
+          {admissions_by_month.length > 0 && (
+            <>
+              <h3>Admissions by Month-Year</h3>
+              <table style={{ width: "100%", marginTop: "10px", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={{ border: "1px solid black", padding: "6px" }}>Month-Year</th>
+                    <th style={{ border: "1px solid black", padding: "6px" }}>Admissions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {admissions_by_month.map((m) => (
+                    <tr key={m.monthYear}>
+                      <td style={{ border: "1px solid black", padding: "6px" }}>{m.monthYear}</td>
+                      <td style={{ border: "1px solid black", padding: "6px" }}>{m.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+          
+          <div style={{ marginTop: "60px" }}></div>
+
+          {/* Diagnoses Included */}
+          {results.diagnoses_included?.length > 0 && (
+            <>
+              <h3>Diagnoses Included</h3>
+              <table style={{ width: "100%", marginTop: "10px", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={{ border: "1px solid black", padding: "6px" }}>Diagnosis</th>
+                    <th style={{ border: "1px solid black", padding: "6px" }}>Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.diagnoses_included.map((d) => (
+                    <tr key={d.diagnosis}>
+                      <td style={{ border: "1px solid black", padding: "6px" }}>{d.diagnosis}</td>
+                      <td style={{ border: "1px solid black", padding: "6px" }}>{d.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+          
+          <div style={{ marginTop: "60px" }}></div>
+          
+          {/* Diagnoses Excluded */}
+          {results.diagnoses_excluded?.length > 0 && (
+            <>
+              <h3>Diagnoses Excluded</h3>
+              <table style={{ width: "100%", marginTop: "10px", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th>Diagnosis</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.diagnoses_excluded.map((d, i) => (
+                    <tr key={i}>
+                      <td style={{ border: "1px solid black", padding: "6px" }}>{d}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
         </>
       )}
     </div>

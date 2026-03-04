@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     fhir_api_auth_server: str
@@ -10,9 +10,10 @@ class Settings(BaseSettings):
     sql_query: str
 
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = 'utf-8'  # specify encoding if necessary
+    model_config = SettingsConfigDict(
+        env_file="demo.env",
+        env_file_encoding="utf-8"
+    )  
 
 settings = Settings()
 

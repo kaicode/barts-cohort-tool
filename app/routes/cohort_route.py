@@ -4,9 +4,11 @@ from typing import List, Union, Optional
 import pyodbc
 from app.config import settings
 import app.services.fhir_client as fhir_client
+from fastapi.concurrency import run_in_threadpool
 import pandas as pd
 import os
 import json
+import math
 
 router = APIRouter()
 client = fhir_client.FHIRClient()
@@ -62,6 +64,25 @@ def get_snomed_display(code: str) -> str:
     except Exception as e:
         print(f"Error fetching SNOMED display for {code}: {e}")
         return 'Unknown'
+    
+    
+def fetch_from_db(query, params):
+    """
+    Synchronous function to run a SQL query and return a DataFrame.
+    """
+    df = pd.DataFrame()
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            df = pd.DataFrame.from_records(rows, columns=columns)
+        finally:
+            cursor.close()
+            conn.close()
+    return df
 
 @router.post("/cohort/select")
 async def run_select(cohort_definition: CohortDefinition):
@@ -100,13 +121,16 @@ async def run_select(cohort_definition: CohortDefinition):
         ethnicity_list = [{"code": item.code, "display": item.display} for item in ethnicity]
 
     # Must-have & must-not-have codes
-    musthaveSnomedCodes = []
+    musthaveSnomedCodes = set()  # ensure uniqueness
+
     if cohort_definition.mustHaveFindings:
         for item in cohort_definition.mustHaveFindings:
             if item.codesWithDetails:
                 for detail in item.codesWithDetails:
                     if detail.code:
-                        musthaveSnomedCodes.append(detail.code)
+                        musthaveSnomedCodes.add(detail.code)
+                            
+    mustNOThaveDiagnosisNames = []
     
     mustNOThaveSnomedCodes = []
     if cohort_definition.mustNotHaveFindings:
@@ -115,6 +139,9 @@ async def run_select(cohort_definition: CohortDefinition):
                 for detail in item.codesWithDetails:
                     if detail.code:
                         mustNOThaveSnomedCodes.append(detail.code)
+                    
+                    if detail.display:
+                        mustNOThaveDiagnosisNames.append(detail.display)     
     
     # Base SELECT and JOIN statements
     base_query = settings.sql_query
@@ -159,36 +186,41 @@ async def run_select(cohort_definition: CohortDefinition):
         GROUP BY b.Gender, b.Ethnicity, c.DiagCode, a.Adm_Dt, c.Diagnosis, b.Year_of_Birth
     """
 
-    print('final query')
-    print(final_query)
+    # print('final query')
+    # print(final_query)
     
-    print('params')
-    print(params)
+    # print('params')
+    # print(params)
     
     # Run the query
     df_results = pd.DataFrame()
-    conn = get_db_connection()
-    if conn:
-        cursor = conn.cursor()
-        cursor.execute(final_query, params)
-        column_names = [column[0] for column in cursor.description]
-        rows = cursor.fetchall()
-        df_results = pd.DataFrame.from_records(rows, columns=column_names)
-        cursor.close()
-        conn.close()
+    df_results = await run_in_threadpool(fetch_from_db, final_query, params)
         
     # Total patients
     total_patients = df_results["patient_count"].sum()
-    
-    print("Total patients")
-    print(total_patients)
 
-    
+    # print("Total patients")
+    # print(total_patients)
+
+    # Adding any included diagnoses with the count of zero
+    # Group by Diagnosis from df_results
+    if not df_results.empty:
+        # Ensure DiagCode is string
+        df_results["DiagCode"] = df_results["DiagCode"].astype(str)
+        
+        # Aggregate counts
+        diag_counts = df_results.groupby("DiagCode")["patient_count"].sum().to_dict()
+    else:
+        diag_counts = {}
+
+
+    diagnoses_included = []
+
     # Apply disclosure control: if <10, return 0
     if total_patients < 10:
         total_patients = 0
         
-        gender_counts, age_groups, ethnicity_counts, results_json = [], [], [], []
+        gender_counts, age_groups, ethnicity_counts, results_json, admissions_by_month, admissions_by_diagnosis = [], [], [], [], [], []
         
         age_min = "NA"
         age_max = "NA"
@@ -219,7 +251,7 @@ async def run_select(cohort_definition: CohortDefinition):
             
             # Ensure all labels appear even if count is 0
             age_groups = (
-                df_results.groupby("AgeGroup")["patient_count"]
+                df_results.groupby("AgeGroup", observed=True)["patient_count"]
                 .sum()
                 .reindex(labels, fill_value=0)  # <-- reindex ensures missing groups appear with 0
                 .reset_index()
@@ -243,17 +275,81 @@ async def run_select(cohort_definition: CohortDefinition):
             else:
                 age_min = "NA"
                 age_max = "NA"
-
+                
+            # --- Admissions by Month-Year ---
+            df_results["Adm_Dt"] = pd.to_datetime(df_results["Adm_Dt"])
+            df_results["Month_Year"] = df_results["Adm_Dt"].dt.to_period('M').astype(str)
+            
+            admissions_by_month = (
+                df_results.groupby("Month_Year")["patient_count"]
+                .sum()
+                .reset_index()
+                .rename(columns={"Month_Year": "monthYear", "patient_count": "count"})
+                .to_dict(orient="records")
+            )
+            
+            # --- Diagnoses included ---
+            # Ensure DiagCode is string
+            df_results["DiagCode"] = df_results["DiagCode"].astype(str)
+            
+            # Aggregate counts by code
+            diagnoses_included = (
+                df_results.groupby(["DiagCode", "Diagnosis"], as_index=False)["patient_count"]
+                .sum()
+                .reset_index()
+                .rename(columns={"DiagCode": "code", "Diagnosis": "diagnosis", "patient_count": "count"})
+                .to_dict(orient="records")
+            )
+            
+            # print(diagnoses_included)
+            
             # Raw results
             results_json = df_results.to_dict(orient="records")
         else:
-            gender_counts, age_groups, ethnicity_counts, results_json = [], [], [], []
+            gender_counts, age_groups, ethnicity_counts, results_json, admissions_by_month, admissions_by_diagnosis = [], [], [], [], [], []
             
             age_min = "NA"
             age_max = "NA"
 
-    
-    return {
+    # Build a set of diagnoses already included
+    if diagnoses_included:
+        existing_diagnoses = {d["diagnosis"] for d in diagnoses_included}
+        
+
+    # Build mapping: DISPLAY -> CODE for must-have findings
+    # Build mapping: CODE -> DISPLAY
+    musthave_code_display = {}
+    if cohort_definition.mustHaveFindings:
+        for item in cohort_definition.mustHaveFindings:
+            if item.codesWithDetails:
+                for detail in item.codesWithDetails:
+                    if detail.code:
+                        code = str(detail.code)                  # key = code
+                        display = detail.display or code         # value = display
+                        musthave_code_display[code] = display
+                        
+    # print(musthave_code_display)
+
+    # Build a new list in the correct order
+    ordered_diagnoses = []
+
+    for code, display in musthave_code_display.items():
+        # Find the existing entry, if any
+        existing_entry = next((e for e in diagnoses_included if str(e["code"]) == code), None)
+        if existing_entry:
+            # Update diagnosis display
+            existing_entry["diagnosis"] = display
+            ordered_diagnoses.append(existing_entry)
+        else:
+            # Add missing entry with count=0
+            ordered_diagnoses.append({"code": code, "diagnosis": display, "count": 0})
+
+    diagnoses_included = ordered_diagnoses    
+
+            
+    # print(admissions_by_month)
+
+    results_payload = {
         "title": cohort_definition.title,
         "total_patients": int(total_patients),
         "minAge": age_min,
@@ -261,5 +357,30 @@ async def run_select(cohort_definition: CohortDefinition):
         "genderCounts": gender_counts,
         "ageGroups": age_groups,
         "ethnicityCounts": ethnicity_counts,
-        "results": results_json
-    }
+        "admissions_by_month": admissions_by_month,
+        "results": results_json,
+        }
+
+    if musthaveSnomedCodes:
+        results_payload["diagnoses_included"] = diagnoses_included
+       
+
+    if mustNOThaveSnomedCodes:
+        results_payload["diagnoses_excluded"] = mustNOThaveDiagnosisNames
+
+
+    def sanitize_for_json(obj):
+        """Recursively replace NaN/inf with None in dicts/lists."""
+        if isinstance(obj, dict):
+            return {k: sanitize_for_json(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [sanitize_for_json(v) for v in obj]
+        elif isinstance(obj, float):
+            if math.isnan(obj) or math.isinf(obj):
+                return None
+        return obj
+
+    # Apply to both payloads in one line
+    results_payload = sanitize_for_json(results_payload) 
+    
+    return results_payload
