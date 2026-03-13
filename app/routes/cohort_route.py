@@ -490,7 +490,9 @@ async def process_cohort(cohort_definition: CohortDefinition):
                 smtp_server=settings.smtp_server,
                 smtp_port=settings.smtp_port,
                 app_password=settings.app_password,
-                email_failure=settings.failure_email,
+                output_folder = output_folder,
+                cohort__title = cohort_definition.title,
+                data_and_time = datetime_title,
                 html_attachment_path=Path(filename_results_html)        
             )
             print(f"Results email sent to {cohort_definition.email}")
@@ -539,7 +541,9 @@ async def process_cohort(cohort_definition: CohortDefinition):
                 smtp_server=settings.smtp_server,
                 smtp_port=settings.smtp_port,
                 app_password=settings.app_password,
-                email_failure=settings.failure_email,
+                output_folder=output_folder,
+                cohort__title = cohort_definition.title,
+                data_and_time = datetime_title,
                 html_attachment_path=Path(filename)        
             )
          
@@ -595,7 +599,9 @@ async def process_cohort(cohort_definition: CohortDefinition):
                 smtp_server=settings.smtp_server,
                 smtp_port=settings.smtp_port,
                 app_password=settings.app_password,
-                email_failure=settings.failure_email,
+                output_folder=output_folder,
+                cohort__title = cohort_definition.title,
+                data_and_time = datetime_title,
                 html_attachment_path=Path(filename)        
             )
             print("Email with errors sent")

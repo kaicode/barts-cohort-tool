@@ -10,6 +10,7 @@ idna==3.10
 pandas==2.2.3
 plotly==6.1.1
 pydantic==2.10.5
+pydantic-settings==2.13.1
 pydantic_core==2.27.2
 pyodbc==5.2.0
 python-dotenv==1.0.1

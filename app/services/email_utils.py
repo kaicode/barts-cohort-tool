@@ -12,6 +12,7 @@ from app.config import settings
 import base64
 from io import BytesIO
 import plotly.express as px
+import os
 
 def generate_html_report(results, filename):
     gender_data = results.get("genderCounts", [])
@@ -196,7 +197,9 @@ def send_results_email(
     smtp_server: str,
     smtp_port: int,
     app_password: str,
-    email_failure: str | None = None,
+    output_folder: str,
+    cohort_title = str,
+    data_and_time = str,
     html_attachment_path: Path | None = None,
 ):
     # ---- Build email ----
@@ -228,15 +231,12 @@ def send_results_email(
     except Exception as e:
         print(f"Failed to send email: {e}")
 
-        if email_failure:
-            # Build NEW fallback message
-            fallback = EmailMessage()
-            fallback["From"] = sender_email
-            fallback["To"] = email_failure
-            fallback["Subject"] = f"[FAILURE] {subject}"
-            fallback.set_content(f"Error sending to {to_email}:\n{e}")
-
-            with smtplib.SMTP(smtp_server, smtp_port) as server:
-                server.starttls()
-                server.login(sender_email, app_password)
-                server.send_message(fallback)
+        failure_filename = os.path.join(output_folder,
+                f"{cohort_title.replace(' ', '_')}_results_html_{data_and_time}_failure.txt"
+            )
+        
+        with open(failure_filename, "w") as f:
+            f.write(f"Email sending failed\n")
+            f.write(f"Recipient: {to_email}\n")
+            f.write(f"Subject: {subject}\n")
+            f.write(f"Error: {e}\n")
