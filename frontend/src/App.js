@@ -28,7 +28,7 @@ function CohortForm() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    document.title = "Patient Cohorting Tool";
+    document.title = "Patient Cohorting Tool [DEMO]";
   }, []);
 
   const handleEthnicityChange = (code, label) => {
@@ -110,7 +110,12 @@ function CohortForm() {
 
     return (
     <div style={{ margin: '20px', maxWidth: '600px' }}>
-      <h1>Cohort Builder</h1>
+      <h1>Cohort Builder [DEMO]</h1>   
+      
+      <p style={{ textDecoration: "underline" }}>
+          This is a demonstration version of the app. The results displayed are for illustrative purposes only and are not real clinical data.
+      </p> 
+        
       <p>Use this form to create a cohort by defining the selection criteria. </p>
       <p>
           If you have any issues, feedback, or comments, please email the Barts Life Sciences team at&nbsp;  
