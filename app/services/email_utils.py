@@ -48,6 +48,10 @@ def generate_html_report(results, filename):
           Generated on {results['date_time_mail']}
       </p>
       
+      <p style="margin-top:10px;font-size:0.9em;color:#666; text-decoration: underline; font-size:14px">
+          NOTE: Counts are rounded to the nearest 10, or shown as zero where the count is less than 10, for disclosure control purposes
+      </p>
+      
       <p style="font-size: 24px; margin-top: 20px;">
           <strong>Requester:</strong> {results['email']}
        </p>
@@ -113,8 +117,18 @@ def generate_html_report(results, filename):
         html += "<h2>Ethnicity distribution</h2>"
     
         if len(set(e['ethnicity'] for e in ethnicity_data)) > 1:
-            df_eth = {e['ethnicity']: e['count'] for e in ethnicity_data}
+            df_eth = {
+                e['ethnicity']: e['count']
+                for e in ethnicity_data
+                if e['count'] > 0
+            }
             fig = px.pie(values=list(df_eth.values()), names=list(df_eth.keys()))
+            fig.update_layout(
+                legend=dict(
+                    x=1.2,
+                    y=0.5
+                )
+            )
             buf = BytesIO()
             fig.write_image(buf, format="png")
             img_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
