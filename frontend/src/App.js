@@ -330,7 +330,15 @@ function ResultsPage() {
 
   return (
     <div style={{ margin: "20px", maxWidth: "1000px" }}>
-      <h1>Results for {title || "Untitled"}</h1>
+      <h1>Results for {title || "Untitled"} [DEMO]</h1>
+      
+      <p style={{marginTop: "10px", color: "#666", textDecoration: "underline", fontSize: "14px", }}>
+          This is a demonstration version of the app. The results displayed are for illustrative purposes only and are not real clinical data.
+      </p> 
+      
+      <p style={{marginTop: "10px", color: "#666", textDecoration: "underline", fontSize: "14px", }}>
+          NOTE: Counts are rounded to the nearest 10, or shown as zero where the count is less than 10, for disclosure control purposes
+      </p>
 
       {/* Cohort Summary */}
       <div style={{ marginBottom: "20px" }}>

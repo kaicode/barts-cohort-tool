@@ -1,3 +1,17 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed May 13 12:43:31 2026
+
+@author: c_piazzese
+"""
+
+# -*- coding: utf-8 -*-
+"""
+Created on Mon May 11 15:35:05 2026
+
+@author: c_piazzese
+"""
+
 from fastapi import APIRouter 
 from pydantic import BaseModel
 from typing import List, Union, Optional
@@ -83,6 +97,18 @@ def fetch_from_db(query, params):
             cursor.close()
             conn.close()
     return df
+
+
+def anonymise_count(value, threshold=10):
+    """
+    # Apply disclosure control:
+    # - counts < 10 are set to 0
+    # - counts >= 10 are rounded to the nearest 10
+    """
+    
+    if value < threshold:
+        return 0
+    return round(value / 10) * 10
 
 @router.post("/cohort/select")
 async def run_select(cohort_definition: CohortDefinition):
@@ -226,6 +252,10 @@ async def run_select(cohort_definition: CohortDefinition):
         age_max = "NA"
         
     else:
+        
+        # approximating to the nearest 10 
+        total_patients = round(total_patients / 10) * 10
+        
         # Build aggregated results for frontend
         if not df_results.empty:
             # Ensure DiagCode is string
@@ -237,8 +267,10 @@ async def run_select(cohort_definition: CohortDefinition):
                 .sum()
                 .reset_index()
                 .rename(columns={"Gender": "gender", "patient_count": "count"})
-                .to_dict(orient="records")
             )
+            
+            gender_counts["count"] = gender_counts["count"].apply(anonymise_count)
+            gender_counts = gender_counts.to_dict(orient="records")
 
             # Age groups (bucket by decades)
             current_year = pd.to_datetime("today").year
@@ -256,8 +288,10 @@ async def run_select(cohort_definition: CohortDefinition):
                 .reindex(labels, fill_value=0)  # <-- reindex ensures missing groups appear with 0
                 .reset_index()
                 .rename(columns={"AgeGroup": "range", "patient_count": "count"})
-                .to_dict(orient="records")
             )
+            
+            age_groups["count"] = age_groups["count"].apply(anonymise_count)
+            age_groups = age_groups.to_dict(orient="records")
 
             # Ethnicity counts
             ethnicity_counts = (
@@ -265,8 +299,10 @@ async def run_select(cohort_definition: CohortDefinition):
                 .sum()
                 .reset_index()
                 .rename(columns={"Ethnicity": "ethnicity", "patient_count": "count"})
-                .to_dict(orient="records")
             )
+            
+            ethnicity_counts["count"] = ethnicity_counts["count"].apply(anonymise_count)
+            ethnicity_counts = ethnicity_counts.to_dict(orient="records")
             
             # Overall age range
             if df_results["Age"].notna().any():
@@ -285,8 +321,10 @@ async def run_select(cohort_definition: CohortDefinition):
                 .sum()
                 .reset_index()
                 .rename(columns={"Month_Year": "monthYear", "patient_count": "count"})
-                .to_dict(orient="records")
             )
+            
+            admissions_by_month["count"] = admissions_by_month["count"].apply(anonymise_count)
+            admissions_by_month = admissions_by_month.to_dict(orient="records")
             
             # --- Diagnoses included ---
             # Ensure DiagCode is string
@@ -298,8 +336,10 @@ async def run_select(cohort_definition: CohortDefinition):
                 .sum()
                 .reset_index()
                 .rename(columns={"DiagCode": "code", "Diagnosis": "diagnosis", "patient_count": "count"})
-                .to_dict(orient="records")
             )
+            
+            diagnoses_included["count"] = diagnoses_included["count"].apply(anonymise_count)
+            diagnoses_included = diagnoses_included.to_dict(orient="records")
             
             # print(diagnoses_included)
             
