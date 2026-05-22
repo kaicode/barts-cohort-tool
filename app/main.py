@@ -1,11 +1,21 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import os
 from app.routes import snomed_route
 from app.routes import cohort_route
+from app.services import cohort_worker
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    cohort_worker.start_workers()
+    yield
+    cohort_worker.stop_workers()
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.include_router(snomed_route.router, prefix="/api")
 app.include_router(cohort_route.router, prefix="/api")

@@ -18,8 +18,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 import math
-from fastapi.concurrency import run_in_threadpool
 import traceback
+from app.services.cohort_worker import get_queue
 
 
 # from app.services.report_utils import generate_report
@@ -82,10 +82,6 @@ def get_snomed_display(code: str) -> str:
         print(f"Error fetching SNOMED display for {code}: {e}")
         return 'Unknown'
     
-datetime_mail = datetime.now().strftime("%d %B %Y, %H:%M")
-datetime_title = datetime_mail.replace(",", "").replace(":", "_").replace(" ", "_")
-
-
 def fetch_from_db(query, params):
     """
     Synchronous function to run a SQL query and return a DataFrame.
@@ -118,14 +114,17 @@ def anonymise_count(value, threshold=10):
 
 
 
-async def process_cohort(cohort_definition: CohortDefinition):
+def process_cohort(cohort_definition: CohortDefinition):
     try:
+        datetime_mail = datetime.now().strftime("%d %B %Y, %H:%M")
+        datetime_title = datetime_mail.replace(",", "").replace(":", "_").replace(" ", "_")
+
         output_folder = settings.saved_searches
         filename = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_selected_criteria_{datetime_title}.json")
 
         # Save definition as JSON
         with open(filename, "w") as f:
-            json.dump(cohort_definition.dict(), f, indent=4, allow_nan=True)
+            json.dump(cohort_definition.model_dump(), f, indent=4, allow_nan=True)
 
         # Extract demographics
         displays_gender = []
@@ -238,7 +237,7 @@ async def process_cohort(cohort_definition: CohortDefinition):
         
         # Run the query
         df_results = pd.DataFrame()
-        df_results = await run_in_threadpool(fetch_from_db, final_query, params)
+        df_results = fetch_from_db(final_query, params)
             
         # Total patients
         total_patients = df_results["patient_count"].sum()
@@ -654,13 +653,12 @@ async def process_cohort(cohort_definition: CohortDefinition):
 
 
 @router.post("/cohort/select")
-async def run_select(cohort_definition: CohortDefinition, background_tasks: BackgroundTasks):
-    background_tasks.add_task(process_cohort, cohort_definition)
-
+async def run_select(cohort_definition: CohortDefinition):
+    get_queue().put(cohort_definition.model_dump())
     return {
         "status": "processing",
         "message": "Your request is being processed in the background. "
-                   "You will receive an email when results are ready."
+                   "You will receive an email when results are ready.",
     }
     
 
