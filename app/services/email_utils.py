@@ -12,6 +12,7 @@ from app.config import settings
 import base64
 from io import BytesIO
 import plotly.express as px
+import os
 
 def generate_html_report(results, filename):
     gender_data = results.get("genderCounts", [])
@@ -45,6 +46,10 @@ def generate_html_report(results, filename):
           </h1>
       <p style="margin-top:10px;font-size:0.9em;color:#666;">
           Generated on {results['date_time_mail']}
+      </p>
+      
+      <p style="margin-top:10px;font-size:0.9em;color:#666; text-decoration: underline; font-size:14px">
+          NOTE: Counts are rounded to the nearest 10, or shown as zero where the count is less than 10, for disclosure control purposes
       </p>
       
       <p style="font-size: 24px; margin-top: 20px;">
@@ -112,8 +117,18 @@ def generate_html_report(results, filename):
         html += "<h2>Ethnicity distribution</h2>"
     
         if len(set(e['ethnicity'] for e in ethnicity_data)) > 1:
-            df_eth = {e['ethnicity']: e['count'] for e in ethnicity_data}
+            df_eth = {
+                e['ethnicity']: e['count']
+                for e in ethnicity_data
+                if e['count'] > 0
+            }
             fig = px.pie(values=list(df_eth.values()), names=list(df_eth.keys()))
+            fig.update_layout(
+                legend=dict(
+                    x=1.2,
+                    y=0.5
+                )
+            )
             buf = BytesIO()
             fig.write_image(buf, format="png")
             img_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
@@ -192,27 +207,27 @@ def send_results_email(
     to_email: str,
     subject: str,
     html_body: str,
-    # pdf_path: Path | None = None,
     sender_email: str,
     smtp_server: str,
-    smtp_port: int, 
+    smtp_port: int,
     app_password: str,
+    output_folder: str,
+    cohort_title = str,
+    data_and_time = str,
     html_attachment_path: Path | None = None,
-    
 ):
+    # ---- Build email ----
     msg = EmailMessage()
     msg["From"] = sender_email
     msg["To"] = to_email
     msg["Subject"] = subject
 
-    msg.set_content(
-        "Your email client does not support HTML. "
-        "Please contact the Barts Life Sciences team."
-    )
+    # Plaintext + HTML
+    msg.set_content("Your email client does not support HTML.")
     msg.add_alternative(html_body, subtype="html")
-    
-    # Attach HTML report if provided
-    if html_attachment_path is not None and html_attachment_path.exists():
+
+    # Attach the HTML file if needed
+    if html_attachment_path and html_attachment_path.exists():
         msg.add_attachment(
             html_attachment_path.read_bytes(),
             maintype="text",
@@ -220,22 +235,22 @@ def send_results_email(
             filename=html_attachment_path.name,
         )
 
-    """
-    # Attach PDF if provided
-    if pdf_path is not None and pdf_path.exists():
-        msg.add_attachment(
-            pdf_path.read_bytes(),
-            maintype="application",
-            subtype="pdf",
-            filename=pdf_path.name,
-        )
-    """
-    
-    # Send email
+    # ---- Send email (STARTTLS only) ----
     try:
-        with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()  # REQUIRED
             server.login(sender_email, app_password)
             server.send_message(msg)
-        # print(f"Email sent successfully to {to_email}")
+
     except Exception as e:
         print(f"Failed to send email: {e}")
+
+        failure_filename = os.path.join(output_folder,
+                f"{cohort_title.replace(' ', '_')}_results_html_{data_and_time}_failure.txt"
+            )
+        
+        with open(failure_filename, "w") as f:
+            f.write(f"Email sending failed\n")
+            f.write(f"Recipient: {to_email}\n")
+            f.write(f"Subject: {subject}\n")
+            f.write(f"Error: {e}\n")

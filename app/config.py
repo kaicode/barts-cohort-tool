@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     app_password: str
     queue_data_path: str = "./queue_data"
     worker_count: int = 2
+    failure_email: str
+
 
     class Config:
         env_file = ".env"

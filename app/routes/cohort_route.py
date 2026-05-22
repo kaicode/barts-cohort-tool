@@ -1,4 +1,12 @@
-from fastapi import APIRouter
+# -*- coding: utf-8 -*-
+"""
+Created on Mon May 11 15:35:05 2026
+
+@author: c_piazzese
+"""
+
+from fastapi import APIRouter 
+from fastapi import BackgroundTasks
 from pydantic import BaseModel
 from typing import List, Union, Optional
 import pyodbc
@@ -91,6 +99,18 @@ def fetch_from_db(query, params):
             cursor.close()
             conn.close()
     return df
+
+
+def anonymise_count(value, threshold=10):
+    """
+    # Apply disclosure control:
+    # - counts < 10 are set to 0
+    # - counts >= 10 are rounded to the nearest 10
+    """
+    
+    if value < threshold:
+        return 0
+    return round(value / 10) * 10
 
 
 
@@ -209,6 +229,12 @@ def process_cohort(cohort_definition: CohortDefinition):
         # print('params')
         # print(params)
         
+        # Saving query 
+        filename_query = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_final_query_{datetime_title}.json")
+
+        with open(filename_query, "w", encoding="utf-8") as f:
+            f.write(final_query)
+        
         # Run the query
         df_results = pd.DataFrame()
         df_results = fetch_from_db(final_query, params)
@@ -243,6 +269,10 @@ def process_cohort(cohort_definition: CohortDefinition):
             age_max = "NA"
             
         else:
+            
+            # approximating to the nearest 10 
+            total_patients = round(total_patients / 10) * 10
+            
             # Build aggregated results for frontend
             if not df_results.empty:
                 # Ensure DiagCode is string
@@ -254,8 +284,10 @@ def process_cohort(cohort_definition: CohortDefinition):
                     .sum()
                     .reset_index()
                     .rename(columns={"Gender": "gender", "patient_count": "count"})
-                    .to_dict(orient="records")
                 )
+                
+                gender_counts["count"] = gender_counts["count"].apply(anonymise_count)
+                gender_counts = gender_counts.to_dict(orient="records")
 
                 # Age groups (bucket by decades)
                 current_year = pd.to_datetime("today").year
@@ -273,8 +305,10 @@ def process_cohort(cohort_definition: CohortDefinition):
                     .reindex(labels, fill_value=0)  # <-- reindex ensures missing groups appear with 0
                     .reset_index()
                     .rename(columns={"AgeGroup": "range", "patient_count": "count"})
-                    .to_dict(orient="records")
                 )
+                
+                age_groups["count"] = age_groups["count"].apply(anonymise_count)
+                age_groups = age_groups.to_dict(orient="records")
 
                 # Ethnicity counts
                 ethnicity_counts = (
@@ -282,8 +316,10 @@ def process_cohort(cohort_definition: CohortDefinition):
                     .sum()
                     .reset_index()
                     .rename(columns={"Ethnicity": "ethnicity", "patient_count": "count"})
-                    .to_dict(orient="records")
                 )
+                
+                ethnicity_counts["count"] = ethnicity_counts["count"].apply(anonymise_count)
+                ethnicity_counts = ethnicity_counts.to_dict(orient="records")
                 
                 # Overall age range
                 if df_results["Age"].notna().any():
@@ -302,8 +338,10 @@ def process_cohort(cohort_definition: CohortDefinition):
                     .sum()
                     .reset_index()
                     .rename(columns={"Month_Year": "monthYear", "patient_count": "count"})
-                    .to_dict(orient="records")
                 )
+                
+                admissions_by_month["count"] = admissions_by_month["count"].apply(anonymise_count)
+                admissions_by_month = admissions_by_month.to_dict(orient="records")
                 
                 # --- Diagnoses included ---
                 # Ensure DiagCode is string
@@ -315,8 +353,10 @@ def process_cohort(cohort_definition: CohortDefinition):
                     .sum()
                     .reset_index()
                     .rename(columns={"DiagCode": "code", "Diagnosis": "diagnosis", "patient_count": "count"})
-                    .to_dict(orient="records")
                 )
+                
+                diagnoses_included["count"] = diagnoses_included["count"].apply(anonymise_count)
+                diagnoses_included = diagnoses_included.to_dict(orient="records")
                 
                 # print(diagnoses_included)
                 
@@ -362,6 +402,9 @@ def process_cohort(cohort_definition: CohortDefinition):
                 ordered_diagnoses.append({"code": code, "diagnosis": display, "count": 0})
         
         diagnoses_included = ordered_diagnoses    
+        
+        
+        
         
                 
         # print(admissions_by_month)
@@ -488,10 +531,63 @@ def process_cohort(cohort_definition: CohortDefinition):
                 smtp_server=settings.smtp_server,
                 smtp_port=settings.smtp_port,
                 app_password=settings.app_password,
+                output_folder = output_folder,
+                cohort_title = cohort_definition.title,
+                data_and_time = datetime_title,
                 html_attachment_path=Path(filename_results_html)        
             )
             print(f"Results email sent to {cohort_definition.email}")
         except Exception as e:
+            
+            error_trace = traceback.format_exc()
+            
+            html_email_body = f"""
+                <html>
+                  <body style="font-family: Arial, sans-serif; line-height: 1.5;">
+                    <p>Dear BLS cohorting tool team,</p>
+                
+                    <p>
+                      The patient cohorting request titled 
+                      <b>{cohort_definition.title}</b> (submitted by <b>{cohort_definition.email}</b> on {datetime_title})
+                      has <span style="color:red;"><b>failed</b></span> during processing.
+                    </p>
+                
+                    <p>
+                      The error encountered was:
+                      <br/>
+                      <pre style="background:#f6f6f6; padding:10px; border-radius:5px; white-space:pre-wrap;">
+                      {error_trace}
+                      </pre>
+                    </p>
+                
+                    <p>
+                      The cohort definition used for this request has been attached to this email
+                      as a JSON file for debugging.
+                    </p>
+                
+                    <p>
+                      Kind regards,<br/>
+                      BLS Cohorting Tool Automated System
+                    </p>
+                  </body>
+                </html>
+                """
+                
+            send_results_email(
+                to_email=settings.failure_email,
+                subject="Cohort Submission: {cohort_definition.title} - Failed Request",
+                html_body=html_email_body,
+                # pdf_path=None, #pdf_path
+                sender_email=settings.sender_email,
+                smtp_server=settings.smtp_server,
+                smtp_port=settings.smtp_port,
+                app_password=settings.app_password,
+                output_folder=output_folder,
+                cohort_title = cohort_definition.title,
+                data_and_time = datetime_title,
+                html_attachment_path=Path(filename)        
+            )
+         
             print(f"Failed to send email: {e}")
 
         # Return JSON to frontend
@@ -536,7 +632,7 @@ def process_cohort(cohort_definition: CohortDefinition):
                 """
                 
             send_results_email(
-                to_email="bartshealth.bls.cohortingtool@nhs.net",
+                to_email=settings.failure_email,
                 subject="Cohort Submission: {cohort_definition.title} - Failed Request",
                 html_body=html_email_body,
                 # pdf_path=None, #pdf_path
@@ -544,6 +640,9 @@ def process_cohort(cohort_definition: CohortDefinition):
                 smtp_server=settings.smtp_server,
                 smtp_port=settings.smtp_port,
                 app_password=settings.app_password,
+                output_folder=output_folder,
+                cohort_title = cohort_definition.title,
+                data_and_time = datetime_title,
                 html_attachment_path=Path(filename)        
             )
             print("Email with errors sent")
