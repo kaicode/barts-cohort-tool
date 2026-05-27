@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
 import { Button, Form, Spinner } from "react-bootstrap";
 import SnomedSearch from "./components/SnomedSearch";
+import logo from './assets/Barts_logo.svg';
 
 import { ethnicityOptions, genderOptions, defaultAgeRange } from './config/formOptions';
 
@@ -33,8 +34,8 @@ function CohortForm() {
   const [endDate, setEndDate] = useState("");
   const [mustHaveFindings, setMustHaveFindings] = useState([]);
   const [mustNotHaveFindings, setMustNotHaveFindings] = useState([]);
-  const [includeChildCodesHave, setIncludeChildCodesHave] = useState(false);
-  const [includeChildCodesNotHave, setIncludeChildCodesNotHave] = useState(false);
+  const [includeChildCodesHave, setIncludeChildCodesHave] = useState(true);
+  const [includeChildCodesNotHave, setIncludeChildCodesNotHave] = useState(true);
   const [loading, setLoading] = useState(false);
     
   
@@ -126,6 +127,15 @@ function CohortForm() {
   };
 
   return (
+    <>
+    <div style={{ position: "fixed", top: "20px", right: "20px", zIndex: 1000 }}>
+      <img
+        src={logo}
+        alt="Logo"
+        style={{ width: "250px", height: "auto" }}
+      />
+    </div>
+    
     <div style={{ margin: '20px', maxWidth: '600px' }}>  
       {submitted ? (
         <div
@@ -268,6 +278,7 @@ function CohortForm() {
                   );
                 }}
               />
+              {/*
               <Form.Check
                 type="checkbox"
                 label="Include child codes (subsumed concepts)"
@@ -275,6 +286,7 @@ function CohortForm() {
                 onChange={() => setIncludeChildCodesHave(!includeChildCodesHave)}
                 style={{ marginTop: "10px" }}
               />
+              */}
 
               {mustHaveFindings.length > 0 && (
                 <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
@@ -323,6 +335,8 @@ function CohortForm() {
                   );
                 }}
               />
+              
+              {/*
               <Form.Check
                 type="checkbox"
                 label="Include child codes (subsumed concepts)"
@@ -330,6 +344,7 @@ function CohortForm() {
                 onChange={() => setIncludeChildCodesNotHave(!includeChildCodesNotHave)}
                 style={{ marginTop: "10px" }}
               />
+              */}
 
               {mustNotHaveFindings.length > 0 && (
                 <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
@@ -390,6 +405,7 @@ function CohortForm() {
         </div>
     )}
     </div>
+    </>
   );
 }
 
