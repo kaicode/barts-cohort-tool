@@ -132,7 +132,8 @@ function CohortForm() {
       <img
         src={logo}
         alt="Logo"
-        style={{ width: "250px", height: "auto" }}
+        style={{  width: "15vw", minWidth: "80px", maxWidth: "250px", height: "auto" }}
+    
       />
     </div>
     

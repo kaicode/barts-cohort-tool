@@ -67,9 +67,10 @@ const SnomedSearch = (args) => {
 
   return (
     <div>
-      <Form.Group className="mb-3">
-        <Form.Label>{args.label}</Form.Label>
-        <p><i>Start typing to search and add SNOMED terms. Click × to remove.</i></p>
+      <Form.Group className="mb-1">
+        <p style={{ margin: 0, fontWeight: "bold" }}>{args.label}</p>
+        <p style={{ margin: 0 }}><i>Start typing to search and add SNOMED terms. Click × to remove.</i></p>
+        <p style={{ margin: 0 }}><i>Child codes are automatically included.</i></p>
         <p style={{ fontSize: "0.7em" }}>
             If the SNOMED terms are not loading, please refresh the page or try again in about five minutes. 
             If the issue persists, please contact the Barts Life Sciences team using the email provided above.
