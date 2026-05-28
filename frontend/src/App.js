@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
 import { Button, Form, Spinner } from "react-bootstrap";
 import SnomedSearch from "./components/SnomedSearch";
+import logo from './assets/Barts_logo.svg';
 
 import { ethnicityOptions, genderOptions, defaultAgeRange } from './config/formOptions';
 
@@ -109,6 +110,14 @@ function CohortForm() {
   };
 
     return (
+    <>
+    <div style={{ position: "fixed", top: "20px", right: "20px", zIndex: 1000 }}>
+        <img
+          src={logo}
+          alt="Logo"
+          style={{  width: "15vw", minWidth: "80px", maxWidth: "250px", height: "auto" }}
+        />
+    </div>
     <div style={{ margin: '20px', maxWidth: '600px' }}>
       <h1>Cohort Builder [DEMO]</h1>   
       
@@ -183,6 +192,7 @@ function CohortForm() {
               );
             }}
           />
+          {/*
           <Form.Check
             type="checkbox"
             label="Include child codes (subsumed concepts)"
@@ -190,6 +200,7 @@ function CohortForm() {
             onChange={() => setIncludeChildCodesHave(!includeChildCodesHave)}
             style={{ marginTop: "10px" }}
           />
+          */}
 
           {mustHaveFindings.length > 0 && (
             <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
@@ -238,6 +249,7 @@ function CohortForm() {
               );
             }}
           />
+          {/*
           <Form.Check
             type="checkbox"
             label="Include child codes (subsumed concepts)"
@@ -245,6 +257,7 @@ function CohortForm() {
             onChange={() => setIncludeChildCodesNotHave(!includeChildCodesNotHave)}
             style={{ marginTop: "10px" }}
           />
+          */}
 
           {mustNotHaveFindings.length > 0 && (
             <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
@@ -302,6 +315,7 @@ function CohortForm() {
         <li><strong>Must Not Have Findings/Disorders:</strong> {mustNotHaveFindings.length === 0 ? "None" : mustNotHaveFindings.map((item) => (item.code && item.code[0] ? item.code[0].display : null)).filter(Boolean).join(", ") || "None"}</li>
       </ul>
     </div>
+    </>
   );
 }
 
@@ -329,6 +343,14 @@ function ResultsPage() {
   } = results;
 
   return (
+    <>
+    <div style={{ position: "fixed", top: "20px", right: "20px", zIndex: 1000 }}>
+        <img
+          src={logo}
+          alt="Logo"
+          style={{  width: "15vw", minWidth: "80px", maxWidth: "250px", height: "auto" }}
+        />
+    </div>
     <div style={{ margin: "20px", maxWidth: "1000px" }}>
       <h1>Results for {title || "Untitled"} [DEMO]</h1>
       
@@ -549,6 +571,7 @@ function ResultsPage() {
         </>
       )}
     </div>
+    </>
   );
 }
 
