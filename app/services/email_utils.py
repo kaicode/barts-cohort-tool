@@ -14,6 +14,7 @@ from io import BytesIO
 import plotly.express as px
 import os
 
+
 def generate_html_report(results, filename):
     gender_data = results.get("genderCounts", [])
     age_data = results.get("ageGroups", [])
@@ -23,7 +24,10 @@ def generate_html_report(results, filename):
     diagnoses_excluded = results.get("diagnoses_excluded", [])
     admissions_month_data = results.get("admissions_by_month", [])
     
-    
+    logo_path = Path(__file__).parent / "assets" / "Barts_logo.svg"
+
+    with open(logo_path, "rb") as image_file:
+        logo_base64 = base64.b64encode(image_file.read()).decode("utf-8")
 
 
     html = f"""
@@ -41,6 +45,13 @@ def generate_html_report(results, filename):
       </style>
     </head>
     <body>
+      <div style="position:absolute; top:20px; right:20px;">
+           <img 
+             src="data:image/svg+xml;base64,{logo_base64}"
+             style="width:250px; height:auto;"
+             alt="Logo"
+           />
+         </div>
       <h1 style="font-size: 42px; margin-bottom: 4px;">
           Cohort Results – {results['title']} 
           </h1>
