@@ -24,8 +24,8 @@ function CohortForm() {
   const [endDate, setEndDate] = useState("");
   const [mustHaveFindings, setMustHaveFindings] = useState([]);
   const [mustNotHaveFindings, setMustNotHaveFindings] = useState([]);
-  const [includeChildCodesHave, setIncludeChildCodesHave] = useState(false);
-  const [includeChildCodesNotHave, setIncludeChildCodesNotHave] = useState(false);
+  const [includeChildCodesHave, setIncludeChildCodesHave] = useState(true);
+  const [includeChildCodesNotHave, setIncludeChildCodesNotHave] = useState(true);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
