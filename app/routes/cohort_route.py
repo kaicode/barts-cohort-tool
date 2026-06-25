@@ -12,10 +12,11 @@ from typing import List, Union, Optional
 import pyodbc
 from app.config import settings
 import app.services.fhir_client as fhir_client
+from fastapi.concurrency import run_in_threadpool
+from datetime import datetime
 import pandas as pd
 import os
 import json
-from datetime import datetime
 from pathlib import Path
 import math
 import traceback
@@ -48,20 +49,24 @@ class CodeEntry(BaseModel):
     code: str
     display: Optional[str]
 
+class TimeRange(BaseModel):
+    start: Optional[str] = None
+    end: Optional[str] = None
+    
 class CodeDetail(BaseModel):
     code: str
     display: Optional[str]
     count: Optional[int]
+    codeType: Optional[str] = None
+    timeFrame: Optional[TimeRange] = None
 
 class FindingItem(BaseModel):
     code: List[CodeEntry]
     display: Optional[str]
     count: Optional[int]
     codesWithDetails: Optional[List[CodeDetail]]
+    timeFrame: Optional[TimeRange] = None
 
-class TimeRange(BaseModel):
-    start: Optional[str] = None
-    end: Optional[str] = None
 
 class CohortDefinition(BaseModel):
     title: str
@@ -154,28 +159,62 @@ def process_cohort(cohort_definition: CohortDefinition):
             ethnicity_list = [{"code": item.code, "display": item.display} for item in ethnicity]
 
         # Must-have & must-not-have codes
-        musthaveSnomedCodes = set()  # ensure uniqueness
+        musthaveSnomedCodes = set()
+        musthave_filters = []
 
         if cohort_definition.mustHaveFindings:
             for item in cohort_definition.mustHaveFindings:
+                codes = []
+
                 if item.codesWithDetails:
                     for detail in item.codesWithDetails:
                         if detail.code:
+                            codes.append(detail.code)
                             musthaveSnomedCodes.add(detail.code)
-                                
-        mustNOThaveDiagnosisNames = []
-        
+
+                if codes:
+                    musthave_filters.append({
+                        "codes": codes,
+                        "start": item.timeFrame.start if item.timeFrame else None,
+                        "end": item.timeFrame.end if item.timeFrame else None,
+                    })
+
+        mustNOThaveDiagnosisDetails = []
         mustNOThaveSnomedCodes = []
+        mustNOT_filters = []
+
         if cohort_definition.mustNotHaveFindings:
             for item in cohort_definition.mustNotHaveFindings:
+                codes = []
+
                 if item.codesWithDetails:
                     for detail in item.codesWithDetails:
                         if detail.code:
+                            codes.append(detail.code)
                             mustNOThaveSnomedCodes.append(detail.code)
-                        
+
                         if detail.display:
-                            mustNOThaveDiagnosisNames.append(detail.display)
-        
+                            mustNOThaveDiagnosisDetails.append({
+                                "code": str(detail.code),
+                                "diagnosis": detail.display,
+                                "codeType": detail.codeType or "Child code",
+                                "timeFrame": {
+                                    "start": detail.timeFrame.start if detail.timeFrame else (
+                                        item.timeFrame.start if item.timeFrame else None
+                                    ),
+                                    "end": detail.timeFrame.end if detail.timeFrame else (
+                                        item.timeFrame.end if item.timeFrame else None
+                                    ),
+                                },
+                            })
+
+                if codes:
+                    mustNOT_filters.append({
+                        "codes": codes,
+                        "start": item.timeFrame.start if item.timeFrame else None,
+                        "end": item.timeFrame.end if item.timeFrame else None,
+                    })
+                    
         # Base SELECT and JOIN statements
         base_query = settings.sql_query
         
@@ -203,18 +242,78 @@ def process_cohort(cohort_definition: CohortDefinition):
         
         second_query = settings.sql_query2
         
-        if musthaveSnomedCodes:
-            placeholders_have = ', '.join(['?'] * len(musthaveSnomedCodes))
-            where_conditions.append(f"c.DiagCode IN ({second_query} ({placeholders_have}))")
-            params.extend(musthaveSnomedCodes)
+        if musthave_filters:
+            snomed_blocks = []
+
+            for f in musthave_filters:
+                block_conditions = []
+
+                placeholders_have = ", ".join(["?"] * len(f["codes"]))
+                block_conditions.append(f"c.DiagCode IN ({placeholders_have})")
+                params.extend(f["codes"])
+
+                if f["start"]:
+                    block_conditions.append("c.DiagDt >= ?")
+                    params.append(f["start"])
+
+                if f["end"]:
+                    block_conditions.append("c.DiagDt <= ?")
+                    params.append(f["end"])
+
+                snomed_blocks.append("(" + " AND ".join(block_conditions) + ")")
+
+            where_conditions.append("(" + " OR ".join(snomed_blocks) + ")")
+
+        if mustNOT_filters:
+
+            for f in mustNOT_filters:
         
-        if mustNOThaveSnomedCodes:
-            placeholders_nothave = ', '.join(['?'] * len(mustNOThaveSnomedCodes))
-            where_conditions.append(f"c.DiagCode NOT IN ({second_query} ({placeholders_nothave}))")
-            params.extend(mustNOThaveSnomedCodes)
+                exclusion_conditions = []
         
+                placeholders_not = ", ".join(["?"] * len(f["codes"]))
+        
+                exclusion_conditions.append(
+                    f"""
+                    COALESCE(
+                        l2.SNOMED_ConceptId,
+                        CAST(c2.DiagCode AS VARCHAR(200))
+                    ) IN ({placeholders_not})
+                    """
+                )
+        
+                params.extend(f["codes"])
+        
+                if f["start"]:
+                    exclusion_conditions.append("c2.DiagDt >= ?")
+                    params.append(f["start"])
+        
+                if f["end"]:
+                    exclusion_conditions.append("c2.DiagDt <= ?")
+                    params.append(f["end"])
+        
+                where_conditions.append(
+                    f"""
+                    NOT EXISTS (
+                        SELECT 1
+                        FROM [dbo].[rde_cds_apc_PCT] a2 WITH(NOLOCK)
+        
+                        INNER JOIN [dbo].[rde_pc_diagnosis_PCT] c2 WITH(NOLOCK)
+                            ON a2.PERSON_ID = c2.PERSON_ID
+        
+                        LEFT JOIN [dbo].[SNOMED_lookup_PCT] l2 WITH(NOLOCK)
+                            ON c2.DiagCode = l2.SNOMED_DescriptionId
+        
+                        WHERE a2.PERSON_ID = b.PERSON_ID
+                        AND {' AND '.join(exclusion_conditions)}
+                    )
+                    """
+                )
+        
+        # Build final WHERE clause
+        where_clause = " AND ".join(where_conditions)
         
         group_by_statem = settings.group_by
+        
         # Final query
         where_clause = " AND ".join(where_conditions)
         final_query = f"""
@@ -375,38 +474,53 @@ def process_cohort(cohort_definition: CohortDefinition):
        
         # Build mapping: DISPLAY -> CODE for must-have findings
         # Build mapping: CODE -> DISPLAY
-        musthave_code_display = {}
+        musthave_code_details = {}
+        
         if cohort_definition.mustHaveFindings:
             for item in cohort_definition.mustHaveFindings:
                 if item.codesWithDetails:
                     for detail in item.codesWithDetails:
                         if detail.code:
-                            code = str(detail.code)                  # key = code
-                            display = detail.display or code         # value = display
-                            musthave_code_display[code] = display
-                            
+                            code = str(detail.code)
+                            musthave_code_details[code] = {
+                                "diagnosis": detail.display or code,
+                                "codeType": detail.codeType or "Child code",
+                                "timeFrame": {
+                                    "start": detail.timeFrame.start if detail.timeFrame else (
+                                        item.timeFrame.start if item.timeFrame else None
+                                    ),
+                                    "end": detail.timeFrame.end if detail.timeFrame else (
+                                        item.timeFrame.end if item.timeFrame else None
+                                    ),
+                                },
+                            }     
         # print(musthave_code_display)
         
         # Build a new list in the correct order
         ordered_diagnoses = []
         
-        for code, display in musthave_code_display.items():
-            # Find the existing entry, if any
-            existing_entry = next((e for e in diagnoses_included if str(e["code"]) == code), None)
+        for code, detail_info in musthave_code_details.items():
+            existing_entry = next(
+                (e for e in diagnoses_included if str(e["code"]) == code),
+                None
+            )
+        
             if existing_entry:
-                # Update diagnosis display
-                existing_entry["diagnosis"] = display
+                existing_entry["diagnosis"] = detail_info["diagnosis"]
+                existing_entry["codeType"] = detail_info["codeType"]
+                existing_entry["timeFrame"] = detail_info["timeFrame"]
                 ordered_diagnoses.append(existing_entry)
             else:
-                # Add missing entry with count=0
-                ordered_diagnoses.append({"code": code, "diagnosis": display, "count": 0})
-        
-        diagnoses_included = ordered_diagnoses    
-        
-        
-        
-        
+                ordered_diagnoses.append({
+                    "code": code,
+                    "diagnosis": detail_info["diagnosis"],
+                    "codeType": detail_info["codeType"],
+                    "count": 0,
+                    "timeFrame": detail_info["timeFrame"],
+                })
                 
+        diagnoses_included = ordered_diagnoses   
+        
         # print(admissions_by_month)
         
         results_payload = {
@@ -428,7 +542,7 @@ def process_cohort(cohort_definition: CohortDefinition):
            
         
         if mustNOThaveSnomedCodes:
-            results_payload["diagnoses_excluded"] = mustNOThaveDiagnosisNames
+            results_payload["diagnoses_excluded"] = mustNOThaveDiagnosisDetails
         
         results_payload_4json = {
             "sql_query": final_query,
@@ -440,7 +554,7 @@ def process_cohort(cohort_definition: CohortDefinition):
             "ethnicityCounts": ethnicity_counts,
             "admissions_by_month": admissions_by_month,
             "diagnoses_included": diagnoses_included,
-            "diagnoses_excluded": mustNOThaveDiagnosisNames
+            "diagnoses_excluded": mustNOThaveDiagnosisDetails
             }
 
         def sanitize_for_json(obj):

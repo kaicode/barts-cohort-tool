@@ -30,7 +30,7 @@ const genderOptions = [
 
 const defaultAgeRange = {
   min: 18,
-  max: 80
+  max: 120
 };
 
 export { ethnicityOptions, genderOptions, defaultAgeRange };
