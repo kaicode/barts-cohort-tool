@@ -24,6 +24,15 @@ def generate_html_report(results, filename):
     diagnoses_excluded = results.get("diagnoses_excluded", [])
     admissions_month_data = results.get("admissions_by_month", [])
     
+    def format_timeframe(time_frame):
+        if not time_frame:
+            return "Any"
+    
+        start = time_frame.get("start") or "Any"
+        end = time_frame.get("end") or "Any"
+    
+        return f"{start} to {end}"
+    
     logo_path = Path(__file__).parent / "assets" / "Barts_logo.svg"
 
     with open(logo_path, "rb") as image_file:
@@ -174,11 +183,25 @@ def generate_html_report(results, filename):
             html += "<h2>Diagnoses included</h2>"
             html += """
             <table>
-              <tr><th>Diagnosis</th><th>Admissions</th></tr>
+              <tr>
+                <th>Diagnosis</th>
+                <th>Code type</th>
+                <th>Code</th>
+                <th>Timeframe</th>
+                <th>Admissions</th>
+              </tr>
               {}
             </table>
             """.format("".join(
-                f"<tr><td>{d['diagnosis']}</td><td>{d['count']}</td></tr>"
+                f"""
+                <tr>
+                  <td>{d.get('diagnosis', '')}</td>
+                  <td>{d.get('codeType', 'Child code')}</td>
+                  <td>{d.get('code', '')}</td>
+                  <td>{format_timeframe(d.get('timeFrame'))}</td>
+                  <td>{d.get('count', 0)}</td>
+                </tr>
+                """
                 for d in diagnoses_included
             ))
              
@@ -189,15 +212,25 @@ def generate_html_report(results, filename):
             html += "<h2>Diagnoses excluded</h2>"
             html += """
             <table>
-              <tr><th>Diagnosis</th></tr>
+              <tr>
+                <th>Diagnosis</th>
+                <th>Code type</th>
+                <th>Code</th>
+                <th>Timeframe</th>
+              </tr>
               {}
             </table>
-            """.format(
-                "".join(
-                    f"<tr><td>{d}</td></tr>"
-                    for d in diagnoses_excluded
-                )
-            )
+            """.format("".join(
+                f"""
+                <tr>
+                  <td>{d.get('diagnosis', '')}</td>
+                  <td>{d.get('codeType', 'Child code')}</td>
+                  <td>{d.get('code', '')}</td>
+                  <td>{format_timeframe(d.get('timeFrame'))}</td>
+                </tr>
+                """
+                for d in diagnoses_excluded
+            ))
                  
                  
         # -------------------
