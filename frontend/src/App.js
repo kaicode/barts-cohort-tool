@@ -27,6 +27,8 @@ function CohortForm() {
   const [includeChildCodesHave, setIncludeChildCodesHave] = useState(true);
   const [includeChildCodesNotHave, setIncludeChildCodesNotHave] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [invalidAdmissionDateRange, setInvalidAdmissionDateRange] = useState(false);
+
 
   useEffect(() => {
     document.title = "Patient Cohorting Tool [DEMO]";
@@ -118,7 +120,7 @@ function CohortForm() {
           style={{  width: "15vw", minWidth: "80px", maxWidth: "250px", height: "auto" }}
         />
     </div>
-    <div style={{ margin: '20px', maxWidth: '600px' }}>
+    <div style={{ margin: '20px 0 20px 20px', maxWidth: '1200px', width: '95%' }}>
       <h1>Cohort Builder [DEMO]</h1>   
       
       <p style={{ textDecoration: "underline" }}>
@@ -151,12 +153,12 @@ function CohortForm() {
 
         <Form.Group className="mb-3">
           <Form.Label>Minimum Age: {minAge}</Form.Label>
-          <Form.Range min={0} max={120} value={minAge} onChange={(e) => setMinAge(Number(e.target.value))} />
+          <Form.Range min={18} max={120} value={minAge} onChange={(e) => setMinAge(Number(e.target.value))} />
         </Form.Group>
 
         <Form.Group className="mb-3">
           <Form.Label>Maximum Age: {maxAge}</Form.Label>
-          <Form.Range min={0} max={120} value={maxAge} onChange={(e) => setMaxAge(Number(e.target.value))} />
+          <Form.Range min={18} max={120} value={maxAge} onChange={(e) => setMaxAge(Number(e.target.value))} />
         </Form.Group>
 
         <Form.Group className="mb-3" controlId="ethnicity">
@@ -173,10 +175,52 @@ function CohortForm() {
         </Form.Group>
 
         <Form.Group className="mb-3">
-          <Form.Label>Admission Time Range (Optional) </Form.Label>
-          <Form.Control type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          <Form.Control type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ marginTop: "5px" }} />
-        </Form.Group>
+          <Form.Label>Admission Time Range (Optional)</Form.Label>
+        
+          <Form.Control
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setInvalidAdmissionDateRange(false);
+              }}
+            />
+            
+            <Form.Control
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setInvalidAdmissionDateRange(false);
+              }}
+              onBlur={() => {
+                if (startDate && endDate && startDate > endDate) {
+                  setInvalidAdmissionDateRange(true);
+            
+                  setTimeout(() => {
+                    setStartDate("");
+                    setEndDate("");
+                  }, 1500);
+                }
+              }}
+              style={{ marginTop: "5px" }}
+            />
+        
+          {invalidAdmissionDateRange && (
+            <Form.Text
+              className="text-danger"
+              style={{
+                fontSize: "0.85em",
+                display: "block",
+                width: "100%",
+                marginTop: "0px",
+                marginBottom: "5px",
+              }}
+            >
+              The start date cannot be later than the end date.
+            </Form.Text>
+          )}
+        </Form.Group>    
 
         <Form.Group className="mb-3">
           <Form.Label>Must HAVE Finding / Disorder (Optional)</Form.Label>
@@ -208,6 +252,7 @@ function CohortForm() {
                 const displayValue = item.code?.[0]?.display;
                 const uniqueId = item.code?.[0]?.code;
                 const count = includeChildCodesHave ? item.count : 1;
+                
 
                 return (
                   <li key={uniqueId}>
@@ -220,6 +265,14 @@ function CohortForm() {
                       {displayValue}
                     </a>{' '}
                     {`(Include ${count} code${count !== 1 ? 's' : ''})`}
+                    {item.timeFrame?.start || item.timeFrame?.end ? (
+                      <span>
+                        {" "}
+                        — Timeframe: {item.timeFrame?.start || "Any"} to {item.timeFrame?.end || "Any"}
+                      </span>
+                    ) : (
+                      <span> — Timeframe: Any</span>
+                    )}
                     <Button
                       variant="outline-danger"
                       size="sm"
@@ -277,6 +330,14 @@ function CohortForm() {
                       {displayValue}
                     </a>{' '}
                     {`(Include ${count} code${count !== 1 ? 's' : ''})`}
+                    {item.timeFrame?.start || item.timeFrame?.end ? (
+                      <span>
+                        {" "}
+                        — Timeframe: {item.timeFrame?.start || "Any"} to {item.timeFrame?.end || "Any"}
+                      </span>
+                    ) : (
+                      <span> — Timeframe: Any</span>
+                    )}
                     <Button
                       variant="outline-danger"
                       size="sm"
@@ -311,8 +372,51 @@ function CohortForm() {
         <li><strong>Age Range:</strong> {minAge} - {maxAge}</li>
         <li><strong>Ethnicities:</strong> {ethnicity.length === 0 ? "All" : ethnicity.map((item) => item.display).join(", ")}</li>
         <li><strong>Admission Time Range:</strong> {startDate || endDate ? `${startDate || "Any"} to ${endDate || "Any"}` : "Any"}</li>
-        <li><strong>Must Have Findings/Disorders:</strong> {mustHaveFindings.length === 0 ? "None" : mustHaveFindings.map((item) => (item.code && item.code[0] ? item.code[0].display : null)).filter(Boolean).join(", ") || "None"}</li>
-        <li><strong>Must Not Have Findings/Disorders:</strong> {mustNotHaveFindings.length === 0 ? "None" : mustNotHaveFindings.map((item) => (item.code && item.code[0] ? item.code[0].display : null)).filter(Boolean).join(", ") || "None"}</li>
+        <li>
+          <strong>Must Have Findings/Disorders:</strong>{" "}
+          {mustHaveFindings.length === 0
+            ? "None"
+            : mustHaveFindings
+                .map((item) => {
+                  const display = item.code?.[0]?.display;
+                  const start = item.timeFrame?.start;
+                  const end = item.timeFrame?.end;
+        
+                  if (!display) return null;
+        
+                  const timeframe =
+                    start || end
+                      ? ` (Timeframe: ${start || "Any"} to ${end || "Any"})`
+                      : " (Timeframe: Any)";
+        
+                  return `${display}${timeframe}`;
+                })
+                .filter(Boolean)
+                .join(", ")}
+        </li>
+        
+        <li>
+          <strong>Must Not Have Findings/Disorders:</strong>{" "}
+          {mustNotHaveFindings.length === 0
+            ? "None"
+            : mustNotHaveFindings
+                .map((item) => {
+                  const display = item.code?.[0]?.display;
+                  const start = item.timeFrame?.start;
+                  const end = item.timeFrame?.end;
+        
+                  if (!display) return null;
+        
+                  const timeframe =
+                    start || end
+                      ? ` (Timeframe: ${start || "Any"} to ${end || "Any"})`
+                      : " (Timeframe: Any)";
+        
+                  return `${display}${timeframe}`;
+                })
+                .filter(Boolean)
+                .join(", ")}
+        </li>
       </ul>
     </div>
     </>
@@ -341,6 +445,13 @@ function ResultsPage() {
     diagnoses_included = [],
     diagnoses_excluded = []
   } = results;
+  
+  
+  const formatTimeframe = (timeFrame) => {
+      const start = timeFrame?.start || "Any";
+      const end = timeFrame?.end || "Any";
+      return `${start} to ${end}`;
+    };
 
   return (
     <>
@@ -351,7 +462,13 @@ function ResultsPage() {
           style={{  width: "15vw", minWidth: "80px", maxWidth: "250px", height: "auto" }}
         />
     </div>
-    <div style={{ margin: "20px", maxWidth: "1000px" }}>
+    <div
+          style={{
+            margin: "20px 0 20px 20px",
+            maxWidth: "1200px",
+            width: "95%"
+          }}
+        >
       <h1>Results for {title || "Untitled"} [DEMO]</h1>
       
       <p style={{marginTop: "10px", color: "#666", textDecoration: "underline", fontSize: "14px", }}>
@@ -530,14 +647,20 @@ function ResultsPage() {
               <table style={{ width: "100%", marginTop: "10px", borderCollapse: "collapse" }}>
                 <thead>
                   <tr>
-                    <th style={{ border: "1px solid black", padding: "6px" }}>Diagnosis</th>
-                    <th style={{ border: "1px solid black", padding: "6px" }}>Count</th>
+                      <th style={{ border: "1px solid black", padding: "6px", width: "40%" }}>Diagnosis</th>
+                      <th style={{ border: "1px solid black", padding: "6px", width: "10%" }}>Code type</th>
+                      <th style={{ border: "1px solid black", padding: "6px", width: "20%" }}>Code</th>
+                      <th style={{ border: "1px solid black", padding: "6px", width: "50%" }}>Timeframe</th>
+                      <th style={{ border: "1px solid black", padding: "6px", width: "20%" }}>Count</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {results.diagnoses_included.map((d) => (
-                    <tr key={d.diagnosis}>
+                  {results.diagnoses_included.map((d, i) => (
+                    <tr key={`${d.code}-${i}`}>
                       <td style={{ border: "1px solid black", padding: "6px" }}>{d.diagnosis}</td>
+                      <td style={{ border: "1px solid black", padding: "6px" }}>{d.codeType || "Child code"}</td>
+                      <td style={{ border: "1px solid black", padding: "6px" }}>{d.code}</td>
+                      <td style={{ border: "1px solid black", padding: "6px" }}>{formatTimeframe(d.timeFrame)}</td>
                       <td style={{ border: "1px solid black", padding: "6px" }}>{d.count}</td>
                     </tr>
                   ))}
@@ -552,20 +675,26 @@ function ResultsPage() {
           {results.diagnoses_excluded?.length > 0 && (
             <>
               <h3>Diagnoses Excluded</h3>
-              <table style={{ width: "100%", marginTop: "10px", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    <th>Diagnosis</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.diagnoses_excluded.map((d, i) => (
-                    <tr key={i}>
-                      <td style={{ border: "1px solid black", padding: "6px" }}>{d}</td>
+                <table style={{ width: "100%", marginTop: "10px", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th style={{ border: "1px solid black", padding: "6px", width: "40%" }}>Diagnosis</th>
+                      <th style={{ border: "1px solid black", padding: "6px", width: "10%" }}>Code type</th>
+                      <th style={{ border: "1px solid black", padding: "6px", width: "20%" }}>Code</th>
+                      <th style={{ border: "1px solid black", padding: "6px", width: "50%" }}>Timeframe</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {results.diagnoses_excluded.map((d, i) => (
+                      <tr key={`${d.code}-${i}`}>
+                          <td style={{ border: "1px solid black", padding: "6px" }}>{d.diagnosis}</td>
+                          <td style={{ border: "1px solid black", padding: "6px" }}>{d.codeType || "Child code"}</td>
+                          <td style={{ border: "1px solid black", padding: "6px" }}>{d.code}</td>
+                          <td style={{ border: "1px solid black", padding: "6px" }}>{formatTimeframe(d.timeFrame)}</td>
+                        </tr>
+                    ))}
+                  </tbody>
+                </table>
             </>
           )}
         </>

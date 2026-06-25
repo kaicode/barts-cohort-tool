@@ -1,90 +1,195 @@
-import React, { useState } from 'react';
-import { AsyncTypeahead } from 'react-bootstrap-typeahead';
-import Form from 'react-bootstrap/Form';
+import React, { useState } from "react";
+import { AsyncTypeahead } from "react-bootstrap-typeahead";
+import Form from "react-bootstrap/Form";
+import Button from "react-bootstrap/Button";
 
 const SnomedSearch = (args) => {
   const [code, setCode] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [options, setOptions] = useState([]);
+  const [codeStartDate, setCodeStartDate] = useState("");
+  const [codeEndDate, setCodeEndDate] = useState("");
+  
+  const invalidDateRange =
+      codeStartDate &&
+      codeEndDate &&
+      new Date(codeStartDate) > new Date(codeEndDate);
 
   const handleSearch = (query) => {
-  setIsLoading(true);
-  fetch(`/api/snomed/search?ecl=<<${args.target_code}&term=${query}`)
-    .then(response => response.json())
-    .then(data => {
-      const options = data.expansion?.contains || []; // ✅ Optional chaining
-      setOptions(options);
-      setIsLoading(false);
-    })
-    .catch(error => {
-      console.error("Error fetching SNOMED terms:", error);
-      setOptions([]);
-      setIsLoading(false);
-    });
+    setIsLoading(true);
+
+    fetch(`/api/snomed/search?ecl=<<${args.target_code}&term=${query}`)
+      .then((response) => response.json())
+      .then((data) => {
+        const options = data.expansion?.contains || [];
+        setOptions(options);
+        setIsLoading(false);
+      })
+      .catch((error) => {
+        console.error("Error fetching SNOMED terms:", error);
+        setOptions([]);
+        setIsLoading(false);
+      });
   };
 
-  const selectCode = (selected) => {
-    setCode(selected);
-    if (selected.length === 1) {
-      const selectedItem = selected[0];
-      fetch(`/api/snomed/count-descendants-and-self?code=${selectedItem.code}`)
-          .then(response => response.json())
-          .then(data => {
-            // Log the entire API response to check the structure
-            // console.log("API Response:", data);
+  const addCode = () => {
+      if (code.length !== 1) {
+        alert("Please select one SNOMED term first.");
+        return;
+      }
+    
+      if (invalidDateRange) {
+        return;
+      }
+    
+      const selectedItem = code[0];
+      const selectedCode = String(selectedItem.code);
+
+    fetch(`/api/snomed/count-descendants-and-self?code=${selectedItem.code}`)
+      .then((response) => response.json())
+      .then((data) => {
+        const count = data.expansion?.total || 0;
+
+        let codesWithDetails =
+          data.expansion?.contains?.map((item) => ({
+            code: item.code,
+            display: item.display,
+            count: count,
+            codeType:
+              String(item.code) === selectedCode
+                ? "Primary code"
+                : "Child code",
+            timeFrame: {
+              start: codeStartDate,
+              end: codeEndDate,
+            },
+          })) || [];
         
-            // Extract the count from the data
-            const count = data.expansion.total || 0;
-        
-            // Log the count value
-            // console.log("Total count:", count);
-        
-            // Extract the array of codes, display values, and their counts
-            const codesWithDetails = data.expansion.contains.map(item => ({
-              code: item.code,
-              display: item.display,
-              count: count,  // You can set it to the same count if it's meant to be the same for all
-            }));
-        
-            // Log the array of codes, displays, and counts
-            // console.log("Codes with details:", codesWithDetails);
-        
-            // Pass the extracted data to onSelect if provided
-            if (args.onSelect) {
-              args.onSelect({
-                code: selected,
-                display: selectedItem.display,
-                count: count,
-                codesWithDetails: codesWithDetails, // Pass all the details in an array
-              });
-            }
-          })
-          .catch(error => {
-            console.error("Error fetching child codes:", error);
-          });
-    }
+        if (!codesWithDetails.some((item) => String(item.code) === selectedCode)) {
+          codesWithDetails = [
+            {
+              code: selectedItem.code,
+              display: selectedItem.display,
+              count: count,
+              codeType: "Primary code",
+              timeFrame: {
+                start: codeStartDate,
+                end: codeEndDate,
+              },
+            },
+            ...codesWithDetails,
+          ];
+        }
+
+        if (args.onSelect) {
+          args.onSelect({
+              code: code,
+              display: selectedItem.display,
+              count: count,
+              codesWithDetails: codesWithDetails,
+              timeFrame: {
+                start: codeStartDate,
+                end: codeEndDate,
+              },
+            });
+        }
+
+        setCode([]);
+        setCodeStartDate("");
+        setCodeEndDate("");
+      })
+      .catch((error) => {
+        console.error("Error fetching child codes:", error);
+      });
   };
 
   return (
     <div>
-       <Form.Group className="mb-1">
+      <Form.Group className="mb-1">
         <p style={{ margin: 0, fontWeight: "bold" }}>{args.label}</p>
-        <p style={{ margin: 0 }}><i>Start typing to search and add SNOMED terms. Click × to remove.</i></p>
-        <p style={{ margin: 0 }}><i>Child codes are automatically included.</i></p>
-        <p style={{ fontSize: "0.7em" }}>
-            If the SNOMED terms are not loading, please refresh the page or try again in about five minutes. 
-            If the issue persists, please contact the Barts Life Sciences team using the email provided above.
+
+        <p style={{ margin: 0 }}>
+          <i>Start typing to search and add SNOMED terms.</i>
         </p>
-        <AsyncTypeahead
-          id={args.label}
-          labelKey="display"
-          options={options}
-          isLoading={isLoading}
-          onSearch={handleSearch}
-          placeholder="Search for something..."
-          selected={code}
-          onChange={selectCode}
-        />
+
+        <p style={{ margin: 0 }}>
+          <i>Select the term, choose the optional date range, then click Add.</i>
+        </p>
+
+        <p style={{ margin: 0 }}>
+          <i>Child codes are automatically included.</i>
+        </p>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            alignItems: "end",
+            width: "100%",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ width: "500px" }}>
+            <AsyncTypeahead
+              id={args.label}
+              labelKey="display"
+              options={options}
+              isLoading={isLoading}
+              onSearch={handleSearch}
+              placeholder="Search for something..."
+              selected={code}
+              onChange={setCode}
+            />
+          </div>
+
+          <Form.Group style={{ width: "320px" }}>
+            <Form.Label>From</Form.Label>
+            <Form.Control
+              type="date"
+              value={codeStartDate}
+              onChange={(e) => setCodeStartDate(e.target.value)}
+            />
+          </Form.Group>
+
+          <Form.Group style={{ width: "320px" }}>
+            <Form.Label>To</Form.Label>
+            <Form.Control
+              type="date"
+              value={codeEndDate}
+              onChange={(e) => setCodeEndDate(e.target.value)}
+            />
+          </Form.Group>
+          
+          {invalidDateRange && (
+              <Form.Text
+                className="text-danger"
+                style={{
+                  fontSize: "0.85em",
+                  display: "block",
+                  width: "100%",
+                  marginTop: "0px",
+                  marginBottom: "5px",
+                }}
+              >
+                The start date cannot be later than the end date.
+              </Form.Text>
+            )}
+
+          <Button
+            variant="outline-primary"
+            onClick={addCode}
+            disabled={code.length !== 1 || invalidDateRange}
+            style={{ height: "38px", width: "90px" }}
+          >
+            Add
+          </Button>
+        </div>
+
+        <p style={{ fontSize: "0.7em", marginTop: "5px" }}>
+          If the SNOMED terms are not loading, please refresh the page or try
+          again in about five minutes. If the issue persists, please contact the
+          Barts Life Sciences team using the email provided above.
+        </p>
       </Form.Group>
     </div>
   );
