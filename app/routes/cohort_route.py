@@ -294,16 +294,7 @@ def process_cohort(cohort_definition: CohortDefinition):
                 where_conditions.append(
                     f"""
                     NOT EXISTS (
-                        SELECT 1
-                        FROM [dbo].[rde_cds_apc_PCT] a2 WITH(NOLOCK)
-        
-                        INNER JOIN [dbo].[rde_pc_diagnosis_PCT] c2 WITH(NOLOCK)
-                            ON a2.PERSON_ID = c2.PERSON_ID
-        
-                        LEFT JOIN [dbo].[SNOMED_lookup_PCT] l2 WITH(NOLOCK)
-                            ON c2.DiagCode = l2.SNOMED_DescriptionId
-        
-                        WHERE a2.PERSON_ID = b.PERSON_ID
+                        {second_query}
                         AND {' AND '.join(exclusion_conditions)}
                     )
                     """
@@ -322,8 +313,8 @@ def process_cohort(cohort_definition: CohortDefinition):
             GROUP BY {group_by_statem}
         """
 
-        # print('final query')
-        # print(final_query)
+        print('final query')
+        print(final_query)
         
         # print('params')
         # print(params)
