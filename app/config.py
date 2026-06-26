@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     dw_connection: str
     saved_searches: str
     sql_query: str
+    sql_query2: str
 
 
     model_config = SettingsConfigDict(

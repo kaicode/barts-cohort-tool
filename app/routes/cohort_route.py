@@ -199,6 +199,8 @@ async def run_select(cohort_definition: CohortDefinition):
     if start_date and end_date:
         where_conditions.append("a.Adm_Dt >= ? AND a.Adm_Dt <= ?")
         params.extend([start_date, end_date])
+        
+    second_query = settings.sql_query2
 
     if musthave_filters:
         snomed_blocks = []
@@ -252,16 +254,7 @@ async def run_select(cohort_definition: CohortDefinition):
             where_conditions.append(
                 f"""
                 NOT EXISTS (
-                    SELECT 1
-                    FROM [dbo].[rde_cds_apc_PCT] a2 WITH(NOLOCK)
-    
-                    INNER JOIN [dbo].[rde_pc_diagnosis_PCT] c2 WITH(NOLOCK)
-                        ON a2.PERSON_ID = c2.PERSON_ID
-    
-                    LEFT JOIN [dbo].[SNOMED_lookup_PCT] l2 WITH(NOLOCK)
-                        ON c2.DiagCode = l2.SNOMED_DescriptionId
-    
-                    WHERE a2.PERSON_ID = b.PERSON_ID
+                    {second_query}
                     AND {' AND '.join(exclusion_conditions)}
                 )
                 """
