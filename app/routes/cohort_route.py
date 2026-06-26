@@ -313,8 +313,8 @@ def process_cohort(cohort_definition: CohortDefinition):
             GROUP BY {group_by_statem}
         """
 
-        print('final query')
-        print(final_query)
+        # print('final query')
+        # print(final_query)
         
         # print('params')
         # print(params)
