@@ -234,7 +234,7 @@ async def run_select(cohort_definition: CohortDefinition):
     
             exclusion_conditions.append(
                 f"""
-                CAST(l.SNOMED_ConceptId AS VARCHAR(50)) IN ({placeholders_not})
+                CAST(l2.SNOMED_ConceptId AS VARCHAR(50)) IN ({placeholders_not})
                 """
             )
     
