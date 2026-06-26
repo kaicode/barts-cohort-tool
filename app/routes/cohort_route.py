@@ -249,7 +249,7 @@ def process_cohort(cohort_definition: CohortDefinition):
                 block_conditions = []
 
                 placeholders_have = ", ".join(["?"] * len(f["codes"]))
-                block_conditions.append(f"c.DiagCode IN ({placeholders_have})")
+                block_conditions.append(f"CAST(l.SNOMED_ConceptId AS VARCHAR(50)) IN ({placeholders_have})")
                 params.extend(f["codes"])
 
                 if f["start"]:
@@ -274,10 +274,7 @@ def process_cohort(cohort_definition: CohortDefinition):
         
                 exclusion_conditions.append(
                     f"""
-                    COALESCE(
-                        l2.SNOMED_ConceptId,
-                        CAST(c2.DiagCode AS VARCHAR(200))
-                    ) IN ({placeholders_not})
+                    CAST(l.SNOMED_ConceptId AS VARCHAR(50)) IN ({placeholders_not})
                     """
                 )
         
