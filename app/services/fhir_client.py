@@ -1,9 +1,18 @@
+import re
 import requests
 import time
 import threading
+from urllib.parse import quote
+
 from app.config import settings
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
+
+_SNOMED_CODE_RE = re.compile(r"^[1-9]\d{5,17}$")
+
+
+def is_snomed_code(term: str) -> bool:
+    return bool(_SNOMED_CODE_RE.match(term.strip()))
 
 
 class FHIRClient:
@@ -144,7 +153,18 @@ class FHIRClient:
     # SNOMED QUERIES
     # ------------------------
     def search_snomed(self, ecl: str, term: str, count: int = 20):
-        url = f"{settings.fhir_api_url}/ValueSet/$expand?url=http://snomed.info/sct?fhir_vs=ecl/{ecl}&filter={term}"
+        stripped = term.strip()
+        if is_snomed_code(stripped):
+            ecl = f"{ecl} AND {stripped}"
+            filter_term = ""
+        else:
+            filter_term = term
+
+        vs_url = f"http://snomed.info/sct?fhir_vs=ecl/{ecl}"
+        url = (
+            f"{settings.fhir_api_url}/ValueSet/$expand?"
+            f"url={quote(vs_url, safe='')}&filter={quote(filter_term, safe='')}"
+        )
         response = self.session.get(url, headers=self.get_headers(), timeout=60)
         return response.json()
 
