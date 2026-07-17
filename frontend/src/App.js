@@ -129,7 +129,7 @@ function CohortForm() {
         
       <p>Use this form to create a cohort by defining the selection criteria. </p>
       <p>
-          If you have any issues, feedback, or comments, please email the Barts Life Sciences team at&nbsp;  
+          If you have any issues, feedback, or comments, or if you would like to use the Cohort Builder with real clinical data please email the Barts Life Sciences team at&nbsp;  
           <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">bartshealth.bls.cohortingtool@nhs.net</a>
       </p>
       <Form onSubmit={handleSubmit}>
