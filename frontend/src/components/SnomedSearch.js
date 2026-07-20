@@ -139,6 +139,8 @@ const SnomedSearch = (args) => {
               placeholder="Search for something..."
               selected={code}
               onChange={setCode}
+              useCache={false}
+              filterBy={() => true}
             />
           </div>
 
