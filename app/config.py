@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     queue_data_path: str = "./queue_data"
     worker_count: int = 2
     failure_email: str
+    demo: str
 
 
     class Config:

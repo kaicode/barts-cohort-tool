@@ -21,6 +21,7 @@ from pathlib import Path
 import math
 import traceback
 from app.services.cohort_worker import get_queue
+from app.config import settings
 
 
 # from app.services.report_utils import generate_report
@@ -29,6 +30,12 @@ from app.services.email_utils import generate_html_report
 
 router = APIRouter()
 client = fhir_client.FHIRClient()
+
+@router.get("/config")
+def get_config():
+    return {
+        "demo": settings.demo == "yes"
+    }
 
 # Database connection function
 def get_db_connection():
@@ -70,7 +77,7 @@ class FindingItem(BaseModel):
 
 class CohortDefinition(BaseModel):
     title: str
-    email:str
+    email: Optional[str] = None
     gender: Union[str, List[CodeEntry]]
     ageRange: AgeRange
     ethnicity: Union[str, List[CodeEntry]]
@@ -300,10 +307,11 @@ def process_cohort(cohort_definition: CohortDefinition):
         # Build final WHERE clause
         where_clause = " AND ".join(where_conditions)
         
-        group_by_statem = settings.group_by
+        group_by_statem = ''
+        
+        group_by_statem = settings.group_by 
         
         # Final query
-        where_clause = " AND ".join(where_conditions)
         final_query = f"""
             {base_query}
             WHERE {where_clause}
@@ -324,7 +332,7 @@ def process_cohort(cohort_definition: CohortDefinition):
         
         # Run the query
         df_results = pd.DataFrame()
-        df_results = fetch_from_db(final_query, params)
+        df_results = fetch_from_db(final_query, params) 
             
         # Total patients
         total_patients = df_results["patient_count"].sum()
@@ -482,6 +490,7 @@ def process_cohort(cohort_definition: CohortDefinition):
                                     ),
                                 },
                             }     
+                            
         # print(musthave_code_display)
         
         # Build a new list in the correct order
@@ -511,190 +520,245 @@ def process_cohort(cohort_definition: CohortDefinition):
         
         # print(admissions_by_month)
         
-        results_payload = {
-            "title": cohort_definition.title,
-            "email": cohort_definition.email,
-            "total_patients": int(total_patients),
-            "minAge": age_min,
-            "maxAge": age_max,        
-            "genderCounts": gender_counts,
-            "ageGroups": age_groups,
-            "ethnicityCounts": ethnicity_counts,
-            "admissions_by_month": admissions_by_month,
-            "results": results_json,
-            "date_time_mail": datetime_mail
+        def build_timeframe_label(findings):
+            if not findings:
+                return None
+        
+            labels = []
+        
+            for item in findings:
+                start = item.timeFrame.start if item.timeFrame else None
+                end = item.timeFrame.end if item.timeFrame else None
+        
+                if start or end:
+                    labels.append(f"Timeframe: {start or 'Any'} to {end or 'Any'}")
+        
+            return "; ".join(labels) if labels else None
+        
+        if settings.demo == 'yes':
+            results_payload = {
+                "title": cohort_definition.title,
+                "total_patients": int(total_patients),
+                "minAge": age_min,
+                "maxAge": age_max,
+                "genderCounts": gender_counts,
+                "ageGroups": age_groups,
+                "ethnicityCounts": ethnicity_counts,
+                "admissions_by_month": admissions_by_month,
+                "results": results_json,
+                "diagnoses_included_timeframe": build_timeframe_label(cohort_definition.mustHaveFindings),
+                "diagnoses_excluded_timeframe": build_timeframe_label(cohort_definition.mustNotHaveFindings),
             }
-        
-        if musthaveSnomedCodes:
-            results_payload["diagnoses_included"] = diagnoses_included
-           
-        
-        if mustNOThaveSnomedCodes:
-            results_payload["diagnoses_excluded"] = mustNOThaveDiagnosisDetails
-        
-        results_payload_4json = {
-            "sql_query": final_query,
-            "title": cohort_definition.title,
-            "email": cohort_definition.email,
-            "total_patients": int(total_patients),       
-            "genderCounts": gender_counts,
-            "ageGroups": age_groups,
-            "ethnicityCounts": ethnicity_counts,
-            "admissions_by_month": admissions_by_month,
-            "diagnoses_included": diagnoses_included,
-            "diagnoses_excluded": mustNOThaveDiagnosisDetails
-            }
-
-        def sanitize_for_json(obj):
-            """Recursively replace NaN/inf with None in dicts/lists."""
-            if isinstance(obj, dict):
-                return {k: sanitize_for_json(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [sanitize_for_json(v) for v in obj]
-            elif isinstance(obj, float):
-                if math.isnan(obj) or math.isinf(obj):
-                    return None
-            return obj
-        
-        # Apply to both payloads in one line
-        results_payload = sanitize_for_json(results_payload)
-        results_payload_4json = sanitize_for_json(results_payload_4json)
-        
-        # Saving results
-        filename_results = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_results_{datetime_title}.json")
-
-        # Save definition as JSON
-        with open(filename_results, "w") as f:
-            json.dump(results_payload_4json, f, indent=4, allow_nan=True)
-           
-        
-        # Saving HTML
-        filename_results_html = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_results_html_{datetime_title}.html")
-        generate_html_report(results_payload, filename_results_html)
-        print("Saved results to results.json")
-        
             
-        # Generate HTML + PDF report
-        # filename_pdf = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_{datetime_title}.pdf")
+            if musthaveSnomedCodes:
+                results_payload["diagnoses_included"] = diagnoses_included
+               
 
-        # html_body, pdf_path = generate_report(results_payload, filename_pdf)
-        # print("PDF generated at:", pdf_path)
+            if mustNOThaveSnomedCodes:
+                results_payload["diagnoses_excluded"] = mustNOThaveDiagnosisDetails
 
+
+            def sanitize_for_json(obj):
+                """Recursively replace NaN/inf with None in dicts/lists."""
+                if isinstance(obj, dict):
+                    return {k: sanitize_for_json(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [sanitize_for_json(v) for v in obj]
+                elif isinstance(obj, float):
+                    if math.isnan(obj) or math.isinf(obj):
+                        return None
+                return obj
+
+            # Apply to both payloads in one line
+            results_payload = sanitize_for_json(results_payload) 
+            
+            return results_payload
+            
+        if settings.demo == 'no':
+            results_payload = {
+                "title": cohort_definition.title,
+                "email": cohort_definition.email,
+                "total_patients": int(total_patients),
+                "minAge": age_min,
+                "maxAge": age_max,        
+                "genderCounts": gender_counts,
+                "ageGroups": age_groups,
+                "ethnicityCounts": ethnicity_counts,
+                "admissions_by_month": admissions_by_month,
+                "results": results_json,
+                "date_time_mail": datetime_mail
+                }
         
-        html_email_body = f"""
-            <html>
-              <body style="font-family: Arial, sans-serif; line-height: 1.5;">
-                <p>Dear user,</p>
+            if musthaveSnomedCodes:
+                results_payload["diagnoses_included"] = diagnoses_included
+               
             
-                <p>
-                  Please find attached the results of the request submitted to the
-                  Patient Cohorting Tool on {datetime_mail}.
-                </p>
-                
-                <p>
-                  To view the results, please double-click on the attached HTML file.
-                  It should automatically open in your default web browser
-                  (for example, Google Chrome, Microsoft Edge, or Mozilla Firefox).
-                  <br /><br />
-                  If the file does not open correctly, please download it to your
-                  computer and then open it manually using a web browser.
-                </p>
+            if mustNOThaveSnomedCodes:
+                results_payload["diagnoses_excluded"] = mustNOThaveDiagnosisDetails
             
-                <p>
-                  If you have any issues, feedback, or comments, please email the
-                  Barts Life Sciences data science team at 
-                  <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">
-                    bartshealth.bls.cohortingtool@nhs.net.<br />
-                  </a>
-                </p>
-                
-                <p>
-                  <u>
-                  Please do not respond to this email as it is unmonitored.
-                  </u>
-                </p>
-            
-                <p>
-                  Kind regards,<br />
-                  BLS data science team
-                </p>
-              </body>
-            </html>
-            """
+            results_payload_4json = {
+                "sql_query": final_query,
+                "title": cohort_definition.title,
+                "email": cohort_definition.email,
+                "total_patients": int(total_patients),       
+                "genderCounts": gender_counts,
+                "ageGroups": age_groups,
+                "ethnicityCounts": ethnicity_counts,
+                "admissions_by_month": admissions_by_month,
+                "diagnoses_included": diagnoses_included,
+                "diagnoses_excluded": mustNOThaveDiagnosisDetails
+                }
     
-        # Send results email
-        try:
-            send_results_email(
-                to_email=cohort_definition.email,
-                subject=f"Cohort Results: {cohort_definition.title}",
-                html_body=html_email_body,
-                # pdf_path=None, #pdf_path
-                sender_email=settings.sender_email,
-                smtp_server=settings.smtp_server,
-                smtp_port=settings.smtp_port,
-                app_password=settings.app_password,
-                output_folder = output_folder,
-                cohort_title = cohort_definition.title,
-                data_and_time = datetime_title,
-                html_attachment_path=Path(filename_results_html)        
-            )
-            print(f"Results email sent to {cohort_definition.email}")
-        except Exception as e:
+            def sanitize_for_json(obj):
+                """Recursively replace NaN/inf with None in dicts/lists."""
+                if isinstance(obj, dict):
+                    return {k: sanitize_for_json(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [sanitize_for_json(v) for v in obj]
+                elif isinstance(obj, float):
+                    if math.isnan(obj) or math.isinf(obj):
+                        return None
+                return obj
             
-            error_trace = traceback.format_exc()
+            # Apply to both payloads in one line
+            results_payload = sanitize_for_json(results_payload)
+            results_payload_4json = sanitize_for_json(results_payload_4json)
+            
+            # Saving results
+            filename_results = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_results_{datetime_title}.json")
+    
+            # Save definition as JSON
+            with open(filename_results, "w") as f:
+                json.dump(results_payload_4json, f, indent=4, allow_nan=True)
+               
+            
+            # Saving HTML
+            filename_results_html = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_results_html_{datetime_title}.html")
+            generate_html_report(results_payload, filename_results_html)
+            print("Saved results to results.json")
+            
+                
+            # Generate HTML + PDF report
+            # filename_pdf = os.path.join(output_folder, f"{cohort_definition.title.replace(' ', '_')}_{datetime_title}.pdf")
+    
+            # html_body, pdf_path = generate_report(results_payload, filename_pdf)
+            # print("PDF generated at:", pdf_path)
+    
             
             html_email_body = f"""
                 <html>
                   <body style="font-family: Arial, sans-serif; line-height: 1.5;">
-                    <p>Dear BLS cohorting tool team,</p>
+                    <p>Dear user,</p>
                 
                     <p>
-                      The patient cohorting request titled 
-                      <b>{cohort_definition.title}</b> (submitted by <b>{cohort_definition.email}</b> on {datetime_title})
-                      has <span style="color:red;"><b>failed</b></span> during processing.
+                      Please find attached the results of the request submitted to the
+                      Patient Cohorting Tool on {datetime_mail}.
+                    </p>
+                    
+                    <p>
+                      To view the results, please double-click on the attached HTML file.
+                      It should automatically open in your default web browser
+                      (for example, Google Chrome, Microsoft Edge, or Mozilla Firefox).
+                      <br /><br />
+                      If the file does not open correctly, please download it to your
+                      computer and then open it manually using a web browser.
                     </p>
                 
                     <p>
-                      The error encountered was:
-                      <br/>
-                      <pre style="background:#f6f6f6; padding:10px; border-radius:5px; white-space:pre-wrap;">
-                      {error_trace}
-                      </pre>
+                      If you have any issues, feedback, or comments, please email the
+                      Barts Life Sciences data science team at 
+                      <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">
+                        bartshealth.bls.cohortingtool@nhs.net.<br />
+                      </a>
+                    </p>
+                    
+                    <p>
+                      <u>
+                      Please do not respond to this email as it is unmonitored.
+                      </u>
                     </p>
                 
                     <p>
-                      The cohort definition used for this request has been attached to this email
-                      as a JSON file for debugging.
-                    </p>
-                
-                    <p>
-                      Kind regards,<br/>
-                      BLS Cohorting Tool Automated System
+                      Kind regards,<br />
+                      BLS data science team
                     </p>
                   </body>
                 </html>
                 """
+        
+            # Send results email
+            try:
+                send_results_email(
+                    to_email=cohort_definition.email,
+                    subject=f"Cohort Results: {cohort_definition.title}",
+                    html_body=html_email_body,
+                    # pdf_path=None, #pdf_path
+                    sender_email=settings.sender_email,
+                    smtp_server=settings.smtp_server,
+                    smtp_port=settings.smtp_port,
+                    app_password=settings.app_password,
+                    output_folder = output_folder,
+                    cohort_title = cohort_definition.title,
+                    data_and_time = datetime_title,
+                    html_attachment_path=Path(filename_results_html)        
+                )
+                print(f"Results email sent to {cohort_definition.email}")
+            except Exception as e:
                 
-            send_results_email(
-                to_email=settings.failure_email,
-                subject="Cohort Submission: {cohort_definition.title} - Failed Request",
-                html_body=html_email_body,
-                # pdf_path=None, #pdf_path
-                sender_email=settings.sender_email,
-                smtp_server=settings.smtp_server,
-                smtp_port=settings.smtp_port,
-                app_password=settings.app_password,
-                output_folder=output_folder,
-                cohort_title = cohort_definition.title,
-                data_and_time = datetime_title,
-                html_attachment_path=Path(filename)        
-            )
-         
-            print(f"Failed to send email: {e}")
-
-        # Return JSON to frontend
-        return results_payload
-        pass
+                error_trace = traceback.format_exc()
+                
+                html_email_body = f"""
+                    <html>
+                      <body style="font-family: Arial, sans-serif; line-height: 1.5;">
+                        <p>Dear BLS cohorting tool team,</p>
+                    
+                        <p>
+                          The patient cohorting request titled 
+                          <b>{cohort_definition.title}</b> (submitted by <b>{cohort_definition.email}</b> on {datetime_title})
+                          has <span style="color:red;"><b>failed</b></span> during processing.
+                        </p>
+                    
+                        <p>
+                          The error encountered was:
+                          <br/>
+                          <pre style="background:#f6f6f6; padding:10px; border-radius:5px; white-space:pre-wrap;">
+                          {error_trace}
+                          </pre>
+                        </p>
+                    
+                        <p>
+                          The cohort definition used for this request has been attached to this email
+                          as a JSON file for debugging.
+                        </p>
+                    
+                        <p>
+                          Kind regards,<br/>
+                          BLS Cohorting Tool Automated System
+                        </p>
+                      </body>
+                    </html>
+                    """
+                    
+                send_results_email(
+                    to_email=settings.failure_email,
+                    subject="Cohort Submission: {cohort_definition.title} - Failed Request",
+                    html_body=html_email_body,
+                    # pdf_path=None, #pdf_path
+                    sender_email=settings.sender_email,
+                    smtp_server=settings.smtp_server,
+                    smtp_port=settings.smtp_port,
+                    app_password=settings.app_password,
+                    output_folder=output_folder,
+                    cohort_title = cohort_definition.title,
+                    data_and_time = datetime_title,
+                    html_attachment_path=Path(filename)        
+                )
+             
+                print(f"Failed to send email: {e}")
+    
+            # Return JSON to frontend
+            return results_payload
+            pass
 
     except Exception as e:
         try:
@@ -732,21 +796,38 @@ def process_cohort(cohort_definition: CohortDefinition):
                   </body>
                 </html>
                 """
-                
-            send_results_email(
-                to_email=settings.failure_email,
-                subject="Cohort Submission: {cohort_definition.title} - Failed Request",
-                html_body=html_email_body,
-                # pdf_path=None, #pdf_path
-                sender_email=settings.sender_email,
-                smtp_server=settings.smtp_server,
-                smtp_port=settings.smtp_port,
-                app_password=settings.app_password,
-                output_folder=output_folder,
-                cohort_title = cohort_definition.title,
-                data_and_time = datetime_title,
-                html_attachment_path=Path(filename)        
-            )
+            
+            if settings.demo == 'yes':
+                send_results_email(
+                    to_email=settings.failure_email,
+                    subject="Cohort Submission: {cohort_definition.title} - Failed Request",
+                    html_body=html_email_body,
+                    # pdf_path=None, #pdf_path
+                    smtp_server=settings.smtp_server,
+                    smtp_port=settings.smtp_port,
+                    app_password=settings.app_password,
+                    output_folder=output_folder,
+                    cohort_title = cohort_definition.title,
+                    data_and_time = datetime_title,
+                    html_attachment_path=Path(filename) 
+                    )
+            
+            if settings.demo == 'no':
+                send_results_email(
+                    to_email=settings.failure_email,
+                    subject="Cohort Submission: {cohort_definition.title} - Failed Request",
+                    html_body=html_email_body,
+                    # pdf_path=None, #pdf_path
+                    sender_email=settings.sender_email,
+                    smtp_server=settings.smtp_server,
+                    smtp_port=settings.smtp_port,
+                    app_password=settings.app_password,
+                    output_folder=output_folder,
+                    cohort_title = cohort_definition.title,
+                    data_and_time = datetime_title,
+                    html_attachment_path=Path(filename)        
+                    )   
+            
             print("Email with errors sent")
          
           
@@ -754,14 +835,23 @@ def process_cohort(cohort_definition: CohortDefinition):
             print(f"Failed to send email: {e}")
 
 
+
 @router.post("/cohort/select")
 async def run_select(cohort_definition: CohortDefinition):
-    get_queue().put(cohort_definition.model_dump())
-    return {
-        "status": "processing",
-        "message": "Your request is being processed in the background. "
-                   "You will receive an email when results are ready.",
-    }
+
+    if settings.demo == "yes":
+        return process_cohort(cohort_definition)
+
+    else:
+        get_queue().put(cohort_definition.model_dump())
+
+        return {
+            "status": "processing",
+            "message": (
+                "Your request is being processed in the background. "
+                "You will receive an email when results are ready."
+            ),
+        }
     
 
     

@@ -251,13 +251,13 @@ def send_results_email(
     to_email: str,
     subject: str,
     html_body: str,
-    sender_email: str,
     smtp_server: str,
     smtp_port: int,
     app_password: str,
     output_folder: str,
     cohort_title = str,
     data_and_time = str,
+    sender_email: str | None = None,
     html_attachment_path: Path | None = None,
 ):
     # ---- Build email ----
