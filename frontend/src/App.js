@@ -14,8 +14,19 @@ import {
 
 // --- Cohort Form Page ---
 function CohortForm() {
+  const [demo, setDemo] = useState(false);
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
+  const [email, setEmail] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const titleRegex = /^[a-zA-Z0-9 _-]+$/;
+  const isTitleValid =
+    title.trim().length > 4 && titleRegex.test(title);
+    
+  // Email: standard email validation (simple & safe)
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isEmailValid =
+    email.trim().length > 0 && emailRegex.test(email); 
   const [selectedGenders, setSelectedGenders] = useState([]);
   const [minAge, setMinAge] = useState(defaultAgeRange.min);
   const [maxAge, setMaxAge] = useState(defaultAgeRange.max);
@@ -31,8 +42,18 @@ function CohortForm() {
 
 
   useEffect(() => {
-    document.title = "Patient Cohorting Tool [DEMO]";
-  }, []);
+  fetch("/api/config")
+    .then((response) => response.json())
+    .then((config) => {
+      setDemo(config.demo);
+
+      if (config.demo) {
+        document.title = "Patient Cohorting Tool [DEMO]";
+      } else {
+        document.title = "Patient Cohorting Tool";
+      }
+    });
+}, []);
 
   const handleEthnicityChange = (code, label) => {
     setEthnicity(prev => {
@@ -50,6 +71,7 @@ function CohortForm() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    setSubmitted(true);
     setLoading(true);
 
     // Helper: keep only the main code if child codes not included
@@ -74,6 +96,7 @@ function CohortForm() {
 
   const cohortDefinition = {
     title,
+    ...(demo ? {} : { email }),
     gender: selectedGenders.length === 0 ? "ALL" : selectedGenders,
     ageRange: { min: minAge, max: maxAge },
     ethnicity: ethnicity.length === 0 ? "ALL" : ethnicity,
@@ -94,336 +117,466 @@ function CohortForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cohortDefinition)
       });
-
-      if (!response.ok) throw new Error('Network response was not ok');
-      const data = await response.json();
-
-      // Save results and cohort title
-      sessionStorage.setItem("resultsData", JSON.stringify(data));
-      sessionStorage.setItem("cohortTitle", title);
-      window.open("/results", "_blank");
-
+    
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+    
+      if (demo) {
+        // Demo version: backend returns the results immediately
+        const data = await response.json();
+    
+        sessionStorage.setItem("resultsData", JSON.stringify(data));
+        sessionStorage.setItem("cohortTitle", title);
+        window.open("/results", "_blank");
+      } else {
+        // Production version: backend processes in the background
+        console.log("Setting submitted to true");
+        setSubmitted(true);
+      }
+    
     } catch (error) {
       console.error('Error:', error);
       alert("There was an error processing your request.");
     } finally {
       setLoading(false);
     }
-  };
+    };
 
-    return (
+  return (
     <>
     <div style={{ position: "fixed", top: "20px", right: "20px", zIndex: 1000 }}>
-        <img
-          src={logo}
-          alt="Logo"
-          style={{  width: "15vw", minWidth: "80px", maxWidth: "250px", height: "auto" }}
+      <img
+        src={logo}
+        alt="Logo"
+        style={{  width: "15vw", minWidth: "80px", maxWidth: "250px", height: "auto" }}
         />
     </div>
-    <div style={{ margin: '20px 0 20px 20px', maxWidth: '1200px', width: '95%' }}>
-      <h1>Cohort Builder [DEMO]</h1>   
-      
-      <p style={{ textDecoration: "underline" }}>
-          This is a demonstration version of the app. The results displayed are for illustrative purposes only and are not real clinical data.
-      </p> 
-        
-      <p>Use this form to create a cohort by defining the selection criteria. </p>
-      <p>
-          If you have any issues, feedback, or comments, or if you would like to use the Cohort Builder with real clinical data please email the Barts Life Sciences team at&nbsp;  
-          <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">bartshealth.bls.cohortingtool@nhs.net</a>
-      </p>
-      <Form onSubmit={handleSubmit}>
-        <Form.Group className="mb-3" controlId="title">
-          <Form.Label>Cohort Title (Required) </Form.Label>
-          <Form.Control type="text" placeholder="Title" onChange={(e) => setTitle(e.target.value)} />
-        </Form.Group>
-
-        <Form.Group className="mb-3" controlId="gender">
-          <Form.Label>Gender (Optional — if none selected, all categories will be considered)</Form.Label>
-          {genderOptions.map(({ code, label }) => (
-            <Form.Check
-              key={code}
-              type="checkbox"
-              label={label}
-              checked={selectedGenders.some(item => item.code === code)}
-              onChange={() => handleGenderChange(code, label)}
-            />
-          ))}
-        </Form.Group>
-
-        <Form.Group className="mb-3">
-          <Form.Label>Minimum Age: {minAge}</Form.Label>
-          <Form.Range min={18} max={120} value={minAge} onChange={(e) => setMinAge(Number(e.target.value))} />
-        </Form.Group>
-
-        <Form.Group className="mb-3">
-          <Form.Label>Maximum Age: {maxAge}</Form.Label>
-          <Form.Range min={18} max={120} value={maxAge} onChange={(e) => setMaxAge(Number(e.target.value))} />
-        </Form.Group>
-
-        <Form.Group className="mb-3" controlId="ethnicity">
-          <Form.Label>Ethnicity (Optional — if none selected, all categories will be considered)</Form.Label>
-          {ethnicityOptions.map(({ code, label }) => (
-            <Form.Check
-              key={code}
-              type="checkbox"
-              label={label}
-              checked={ethnicity.some(item => item.code === code)}
-              onChange={() => handleEthnicityChange(code, label)}
-            />
-          ))}
-        </Form.Group>
-
-        <Form.Group className="mb-3">
-          <Form.Label>Admission Time Range (Optional)</Form.Label>
-        
-          <Form.Control
-              type="date"
-              value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                setInvalidAdmissionDateRange(false);
-              }}
-            />
-            
-            <Form.Control
-              type="date"
-              value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setInvalidAdmissionDateRange(false);
-              }}
-              onBlur={() => {
-                if (startDate && endDate && startDate > endDate) {
-                  setInvalidAdmissionDateRange(true);
-            
-                  setTimeout(() => {
-                    setStartDate("");
-                    setEndDate("");
-                  }, 1500);
-                }
-              }}
-              style={{ marginTop: "5px" }}
-            />
-        
-          {invalidAdmissionDateRange && (
-            <Form.Text
-              className="text-danger"
-              style={{
-                fontSize: "0.85em",
-                display: "block",
-                width: "100%",
-                marginTop: "0px",
-                marginBottom: "5px",
-              }}
-            >
-              The start date cannot be later than the end date.
-            </Form.Text>
-          )}
-        </Form.Group>    
-
-        <Form.Group className="mb-3">
-          <Form.Label>Must HAVE Finding / Disorder (Optional)</Form.Label>
-          <SnomedSearch
-            label=""
-            target_code="404684003"
-            onSelect={(snomedSelection) => {
-              const newCode = snomedSelection.code.code || snomedSelection.code[0]?.code;
-              setMustHaveFindings((prev) =>
-                prev.some(item => (item.code.code || item.code[0]?.code) === newCode)
-                  ? prev
-                  : [...prev, snomedSelection]
-              );
+    
+    <div style={{ margin: '20px 0 20px 20px', maxWidth: '1200px', width: '95%' }}> 
+        {submitted && !demo ? (
+          <div
+            style={{
+              marginTop: '60px',
+              padding: '30px',             // increased from 20px
+              display: 'block',            // make it take full width
+              maxWidth: '800px',           // optional: set a max width
+              width: '100%',               // fill available space up to maxWidth
+              border: '1px solid #b6d4fe',
+              backgroundColor: '#e7f3ff',
+              borderRadius: '8px',         // slightly bigger rounded corners
+              color: '#084298',
+              boxSizing: 'border-box',     // ensures padding is included in width
             }}
-          />
-          {/*
-          <Form.Check
-            type="checkbox"
-            label="Include child codes (subsumed concepts)"
-            checked={includeChildCodesHave}
-            onChange={() => setIncludeChildCodesHave(!includeChildCodesHave)}
-            style={{ marginTop: "10px" }}
-          />
-          */}
+          >
+            <h2>Submission received.</h2>
+            <p>The results will be sent to the email address provided when ready.</p>
 
-          {mustHaveFindings.length > 0 && (
-            <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
-              {mustHaveFindings.map((item, index) => {
-                const displayValue = item.code?.[0]?.display;
-                const uniqueId = item.code?.[0]?.code;
-                const count = includeChildCodesHave ? item.count : 1;
+           <p>
+            If you have any issues, feedback, or comments, please email <br />
+            the Barts Life Sciences data science team at<br />  
+            <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">bartshealth.bls.cohortingtool@nhs.net</a>
+            </p>
+            <p>
+              You can now close this page.
+            </p>
+          </div>
+          ) : (
+              <div style={{ margin: '20px 0 20px 20px', maxWidth: '1200px', width: '95%' }}>
+                  {demo ? (
+                      <>
+                       
+                      <h1>Cohort Builder [DEMO]</h1> 
+                      <p style={{ textDecoration: "underline" }}>
+                          This is a demonstration version of the app. The results displayed are for illustrative purposes only and are not real clinical data.
+                      </p> 
+                        
+                      <p>Use this form to create a cohort by defining the selection criteria. </p>
+                      <p>
+                          If you have any issues, feedback, or comments, or if you would like to use the Cohort Builder with real clinical data please email the Barts Life Sciences team at&nbsp;  
+                          <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">bartshealth.bls.cohortingtool@nhs.net</a>
+                      </p>
+                      </>
+                    ) : (
+                     <>
+                        <h1>Cohort Builder</h1>
+                        <p>Use this form to create a cohort by defining the selection criteria. </p>
+                        <p>
+                          If you have any issues, feedback, or comments, please email the Barts Life Sciences team at&nbsp;  
+                          <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">bartshealth.bls.cohortingtool@nhs.net</a>
+                        </p>
+                        
+                    </>
+                    )}
+                    
+                    
+                    <Form
+                      onSubmit={handleSubmit}
+                      style={{ textAlign: 'left', marginTop: '20px' }}
+                    >
+                      <Form.Group className="mb-3" controlId="title">
+                        <Form.Label style={{ marginBottom: "1px" }}>
+                          Cohort Title (Required)
+                        </Form.Label>
                 
+                        <Form.Text
+                          className="text-muted"
+                          style={{
+                            fontSize: "0.85em",
+                            display: "block",
+                            marginTop: "0.1px",
+                            marginBottom: "5px"
+                          }}
+                        >
+                          Title must be at least 5 characters.
+                          <br />
+                          Only letters, numbers, spaces, hyphens (-) and underscores (_).
+                        </Form.Text>
+                
+                        <Form.Control
+                          type="text"
+                          placeholder="Title"
+                          value={title}
+                          onChange={(e) => setTitle(e.target.value)}
+                          isInvalid={title.length > 0 && !isTitleValid}
+                        />
+                
+                        <Form.Control.Feedback
+                          type="invalid"
+                          style={{ marginTop: "2px", whiteSpace: "pre-line" }}
+                        >
+                          {title.trim().length > 0 && title.trim().length < 5
+                            ? "Title must be at least 5 characters."
+                            : "Only letters, numbers, spaces, hyphens (-) and underscores (_) are allowed."}
+                        </Form.Control.Feedback>
+                      </Form.Group>
+                
+                      {!demo && (
+                        <Form.Group className="mb-3" controlId="email">
+                          <Form.Label style={{ marginBottom: "1px" }}>
+                            Email address (Required)
+                          </Form.Label>
+                
+                          <Form.Text
+                            className="text-muted"
+                            style={{
+                              fontSize: "0.85em",
+                              display: "block",
+                              marginTop: "0.5px",
+                              marginBottom: "5px"
+                            }}
+                          >
+                            The results will be sent to the email address provided once ready.
+                          </Form.Text>
+                
+                          <Form.Control
+                            type="email"
+                            placeholder="name.surname@nhs.net"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            isInvalid={email.length > 0 && !isEmailValid}
+                          />
+                
+                          <Form.Control.Feedback
+                            type="invalid"
+                            style={{ marginTop: "2px" }}
+                          >
+                            Please enter a valid email address.
+                          </Form.Control.Feedback>
+                        </Form.Group>
+                      )}
+                
+            <Form.Group className="mb-3" controlId="gender">
+              <Form.Label>Gender (Optional — if none selected, all categories will be considered)</Form.Label>
+              {genderOptions.map(({ code, label }) => (
+                <Form.Check
+                  key={code}
+                  type="checkbox"
+                  label={label}
+                  checked={selectedGenders.some(item => item.code === code)}
+                  onChange={() => handleGenderChange(code, label)}
+                />
+              ))}
+            </Form.Group>
 
-                return (
-                  <li key={uniqueId}>
-                    <a
-                      href={`https://termbrowser.nhs.uk/?perspective=full&conceptId1=${uniqueId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ textDecoration: "underline", color: "#007bff" }}
-                    >
-                      {displayValue}
-                    </a>{' '}
-                    {`(Include ${count} code${count !== 1 ? 's' : ''})`}
-                    {item.timeFrame?.start || item.timeFrame?.end ? (
-                      <span>
-                        {" "}
-                        — Timeframe: {item.timeFrame?.start || "Any"} to {item.timeFrame?.end || "Any"}
-                      </span>
-                    ) : (
-                      <span> — Timeframe: Any</span>
-                    )}
-                    <Button
-                      variant="outline-danger"
-                      size="sm"
-                      onClick={() => setMustHaveFindings(prev => prev.filter((_, i) => i !== index))}
-                      style={{ marginLeft: "10px", padding: "0 6px" }}
-                    >
-                      ❌
-                    </Button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>Minimum Age: {minAge}</Form.Label>
+              <Form.Range min={18} max={120} value={minAge} onChange={(e) => setMinAge(Number(e.target.value))} />
+            </Form.Group>
 
-        <Form.Group className="mb-3">
-          <Form.Label>Must NOT HAVE Finding / Disorder (Optional)</Form.Label>
-          <SnomedSearch
-            label=""
-            target_code="404684003"
-            onSelect={(snomedSelection) => {
-              const newCode = snomedSelection.code.code || snomedSelection.code[0]?.code;
-              setMustNotHaveFindings((prev) =>
-                prev.some(item => (item.code.code || item.code[0]?.code) === newCode)
-                  ? prev
-                  : [...prev, snomedSelection]
-              );
-            }}
-          />
-          {/*
-          <Form.Check
-            type="checkbox"
-            label="Include child codes (subsumed concepts)"
-            checked={includeChildCodesNotHave}
-            onChange={() => setIncludeChildCodesNotHave(!includeChildCodesNotHave)}
-            style={{ marginTop: "10px" }}
-          />
-          */}
+            <Form.Group className="mb-3">
+              <Form.Label>Maximum Age: {maxAge}</Form.Label>
+              <Form.Range min={18} max={120} value={maxAge} onChange={(e) => setMaxAge(Number(e.target.value))} />
+            </Form.Group>
 
-          {mustNotHaveFindings.length > 0 && (
-            <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
-              {mustNotHaveFindings.map((item, index) => {
-                const displayValue = item.code?.[0]?.display;
-                const uniqueId = item.code?.[0]?.code;
-                const count = includeChildCodesNotHave ? item.count : 1;
+            <Form.Group className="mb-3" controlId="ethnicity">
+              <Form.Label>Ethnicity (Optional — if none selected, all categories will be considered)</Form.Label>
+              {ethnicityOptions.map(({ code, label }) => (
+                <Form.Check
+                  key={code}
+                  type="checkbox"
+                  label={label}
+                  checked={ethnicity.some(item => item.code === code)}
+                  onChange={() => handleEthnicityChange(code, label)}
+                />
+              ))}
+            </Form.Group>
 
-                return (
-                  <li key={uniqueId}>
-                    <a
-                      href={`https://termbrowser.nhs.uk/?perspective=full&conceptId1=${uniqueId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ textDecoration: "underline", color: "#007bff" }}
-                    >
-                      {displayValue}
-                    </a>{' '}
-                    {`(Include ${count} code${count !== 1 ? 's' : ''})`}
-                    {item.timeFrame?.start || item.timeFrame?.end ? (
-                      <span>
-                        {" "}
-                        — Timeframe: {item.timeFrame?.start || "Any"} to {item.timeFrame?.end || "Any"}
-                      </span>
-                    ) : (
-                      <span> — Timeframe: Any</span>
-                    )}
-                    <Button
-                      variant="outline-danger"
-                      size="sm"
-                      onClick={() => setMustNotHaveFindings(prev => prev.filter((_, i) => i !== index))}
-                      style={{ marginLeft: "10px", padding: "0 6px" }}
-                    >
-                      ❌
-                    </Button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>Admission Time Range (Optional)</Form.Label>
+            
+              <Form.Control
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    setInvalidAdmissionDateRange(false);
+                  }}
+                />
+                
+                <Form.Control
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    setInvalidAdmissionDateRange(false);
+                  }}
+                  onBlur={() => {
+                    if (startDate && endDate && startDate > endDate) {
+                      setInvalidAdmissionDateRange(true);
+                
+                      setTimeout(() => {
+                        setStartDate("");
+                        setEndDate("");
+                      }, 1500);
+                    }
+                  }}
+                  style={{ marginTop: "5px" }}
+                />
+            
+              {invalidAdmissionDateRange && (
+                <Form.Text
+                  className="text-danger"
+                  style={{
+                    fontSize: "0.85em",
+                    display: "block",
+                    width: "100%",
+                    marginTop: "0px",
+                    marginBottom: "5px",
+                  }}
+                >
+                  The start date cannot be later than the end date.
+                </Form.Text>
+              )}
+            </Form.Group>    
 
-        <Button
-          variant="primary"
-          type="submit"
-          disabled={title.trim().length < 5 || loading}
-        >
-          {loading ? <><Spinner animation="border" size="sm" /> Processing...</> : "Submit"}
-        </Button>
-        <div style={{ fontSize: "0.85rem", color: "#6c757d", marginTop: "5px" }}>
-          The button will be enabled once a title has been provided (minimum 5 characters).
-        </div>
-      </Form>
+            <Form.Group className="mb-3">
+              <Form.Label>Must HAVE Finding / Disorder (Optional)</Form.Label>
+              <SnomedSearch
+                label=""
+                target_code="404684003"
+                onSelect={(snomedSelection) => {
+                  const newCode = snomedSelection.code.code || snomedSelection.code[0]?.code;
+                  setMustHaveFindings((prev) =>
+                    prev.some(item => (item.code.code || item.code[0]?.code) === newCode)
+                      ? prev
+                      : [...prev, snomedSelection]
+                  );
+                }}
+              />
+              {/*
+              <Form.Check
+                type="checkbox"
+                label="Include child codes (subsumed concepts)"
+                checked={includeChildCodesHave}
+                onChange={() => setIncludeChildCodesHave(!includeChildCodesHave)}
+                style={{ marginTop: "10px" }}
+              />
+              */}
+
+              {mustHaveFindings.length > 0 && (
+                <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
+                  {mustHaveFindings.map((item, index) => {
+                    const displayValue = item.code?.[0]?.display;
+                    const uniqueId = item.code?.[0]?.code;
+                    const count = includeChildCodesHave ? item.count : 1;
+
+                    return (
+                      <li key={uniqueId}>
+                        <a
+                          href={`https://termbrowser.nhs.uk/?perspective=full&conceptId1=${uniqueId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ textDecoration: "underline", color: "#007bff" }}
+                        >
+                          {displayValue}
+                        </a>{' '}
+                        {`(Include ${count} code${count !== 1 ? 's' : ''})`}
+                        {item.timeFrame?.start || item.timeFrame?.end ? (
+                          <span>
+                            {" "}
+                            — Timeframe: {item.timeFrame?.start || "Any"} to {item.timeFrame?.end || "Any"}
+                          </span>
+                        ) : (
+                          <span> — Timeframe: Any</span>
+                        )}
+                        <Button
+                          variant="outline-danger"
+                          size="sm"
+                          onClick={() => setMustHaveFindings(prev => prev.filter((_, i) => i !== index))}
+                          style={{ marginLeft: "10px", padding: "0 6px" }}
+                        >
+                          ❌
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Form.Group>
+            
+            <Form.Group className="mb-3">
+              <Form.Label>Must NOT HAVE Finding / Disorder (Optional)</Form.Label>
+              <SnomedSearch
+                label=""
+                target_code="404684003"
+                onSelect={(snomedSelection) => {
+                  const newCode = snomedSelection.code.code || snomedSelection.code[0]?.code;
+                  setMustNotHaveFindings((prev) =>
+                    prev.some(item => (item.code.code || item.code[0]?.code) === newCode)
+                      ? prev
+                      : [...prev, snomedSelection]
+                  );
+                }}
+              />
+              
+              {/*
+              <Form.Check
+                type="checkbox"
+                label="Include child codes (subsumed concepts)"
+                checked={includeChildCodesNotHave}
+                onChange={() => setIncludeChildCodesNotHave(!includeChildCodesNotHave)}
+                style={{ marginTop: "10px" }}
+              />
+              */}
+
+              {mustNotHaveFindings.length > 0 && (
+                <ul style={{ marginTop: "10px", paddingLeft: "20px" }}>
+                  {mustNotHaveFindings.map((item, index) => {
+                    const displayValue = item.code?.[0]?.display;
+                    const uniqueId = item.code?.[0]?.code;
+                    const count = includeChildCodesNotHave ? item.count : 1;
+
+                    return (
+                      <li key={uniqueId}>
+                        <a
+                          href={`https://termbrowser.nhs.uk/?perspective=full&conceptId1=${uniqueId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ textDecoration: "underline", color: "#007bff" }}
+                        >
+                          {displayValue}
+                        </a>{' '}
+                        {`(Include ${count} code${count !== 1 ? 's' : ''})`}
+                        {item.timeFrame?.start || item.timeFrame?.end ? (
+                          <span>
+                            {" "}
+                            — Timeframe: {item.timeFrame?.start || "Any"} to {item.timeFrame?.end || "Any"}
+                          </span>
+                        ) : (
+                          <span> — Timeframe: Any</span>
+                        )}
+                        <Button
+                          variant="outline-danger"
+                          size="sm"
+                          onClick={() => setMustNotHaveFindings(prev => prev.filter((_, i) => i !== index))}
+                          style={{ marginLeft: "10px", padding: "0 6px" }}
+                        >
+                          ❌
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Form.Group>
+
+            <Button
+              variant="primary"
+              disabled={!isTitleValid || (!demo && !isEmailValid) || loading}     
+              onClick={handleSubmit}
+            >
+              {loading ? <Spinner size="sm" /> : "Submit"}
+            </Button>
+            <div style={{ fontSize: "0.85rem", color: "#6c757d", marginTop: "5px" }}>
+              Please provide a title and a valid email address.
+            </div>
+          </Form>
       
-      <h5 style={{ marginTop: '25px' }}>Summary of Selected Criteria</h5>
-      <ul>
-        <li><strong>Title:</strong> {title || "N/A"}</li>
-        <li><strong>Genders:</strong> {selectedGenders.length === 0 ? "All" : selectedGenders.map((item) => item.display).join(", ")}</li>
-        <li><strong>Age Range:</strong> {minAge} - {maxAge}</li>
-        <li><strong>Ethnicities:</strong> {ethnicity.length === 0 ? "All" : ethnicity.map((item) => item.display).join(", ")}</li>
-        <li><strong>Admission Time Range:</strong> {startDate || endDate ? `${startDate || "Any"} to ${endDate || "Any"}` : "Any"}</li>
-        <li>
-          <strong>Must Have Findings/Disorders:</strong>{" "}
-          {mustHaveFindings.length === 0
-            ? "None"
-            : mustHaveFindings
-                .map((item) => {
-                  const display = item.code?.[0]?.display;
-                  const start = item.timeFrame?.start;
-                  const end = item.timeFrame?.end;
-        
-                  if (!display) return null;
-        
-                  const timeframe =
-                    start || end
-                      ? ` (Timeframe: ${start || "Any"} to ${end || "Any"})`
-                      : " (Timeframe: Any)";
-        
-                  return `${display}${timeframe}`;
-                })
-                .filter(Boolean)
-                .join(", ")}
-        </li>
-        
-        <li>
-          <strong>Must Not Have Findings/Disorders:</strong>{" "}
-          {mustNotHaveFindings.length === 0
-            ? "None"
-            : mustNotHaveFindings
-                .map((item) => {
-                  const display = item.code?.[0]?.display;
-                  const start = item.timeFrame?.start;
-                  const end = item.timeFrame?.end;
-        
-                  if (!display) return null;
-        
-                  const timeframe =
-                    start || end
-                      ? ` (Timeframe: ${start || "Any"} to ${end || "Any"})`
-                      : " (Timeframe: Any)";
-        
-                  return `${display}${timeframe}`;
-                })
-                .filter(Boolean)
-                .join(", ")}
-        </li>
-      </ul>
+          <h5 style={{ marginTop: '25px' }}>Summary of Selected Criteria</h5>
+          <ul>
+            <li><strong>Title:</strong> {title || "N/A"}</li>
+            {!demo && (
+                <li><strong>Email:</strong> {email || "N/A"}</li>
+            )}
+            
+            <li><strong>Genders:</strong> {selectedGenders.length === 0 ? "All" : selectedGenders.map((item) => item.display).join(", ")}</li>
+            <li><strong>Age Range:</strong> {minAge} - {maxAge}</li>
+            <li><strong>Ethnicities:</strong> {ethnicity.length === 0 ? "All" : ethnicity.map((item) => item.display).join(", ")}</li>
+            <li><strong>Admission Time Range:</strong> {startDate || endDate ? `${startDate || "Any"} to ${endDate || "Any"}` : "Any"}</li>
+            <li>
+              <strong>Must Have Findings/Disorders:</strong>{" "}
+              {mustHaveFindings.length === 0
+                ? "None"
+                : mustHaveFindings
+                    .map((item) => {
+                      const display = item.code?.[0]?.display;
+                      const start = item.timeFrame?.start;
+                      const end = item.timeFrame?.end;
+            
+                      if (!display) return null;
+            
+                      const timeframe =
+                        start || end
+                          ? ` (Timeframe: ${start || "Any"} to ${end || "Any"})`
+                          : " (Timeframe: Any)";
+            
+                      return `${display}${timeframe}`;
+                    })
+                    .filter(Boolean)
+                    .join(", ")}
+            </li>
+            
+            <li>
+              <strong>Must Not Have Findings/Disorders:</strong>{" "}
+              {mustNotHaveFindings.length === 0
+                ? "None"
+                : mustNotHaveFindings
+                    .map((item) => {
+                      const display = item.code?.[0]?.display;
+                      const start = item.timeFrame?.start;
+                      const end = item.timeFrame?.end;
+            
+                      if (!display) return null;
+            
+                      const timeframe =
+                        start || end
+                          ? ` (Timeframe: ${start || "Any"} to ${end || "Any"})`
+                          : " (Timeframe: Any)";
+            
+                      return `${display}${timeframe}`;
+                    })
+                    .filter(Boolean)
+                    .join(", ")}
+            </li>
+          </ul>
+        </div>
+    )}
     </div>
     </>
   );
 }
 
-// --- Results Page ---
 // --- Results Page ---
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#AA336A"];
 
