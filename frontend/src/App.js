@@ -27,6 +27,12 @@ function CohortForm() {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const isEmailValid =
     email.trim().length > 0 && emailRegex.test(email); 
+  const isAllowedEmail =
+          isEmailValid &&
+          (
+            email.trim().toLowerCase().endsWith("@qmul.ac.uk") ||
+            email.trim().toLowerCase().endsWith("@nhs.net")
+          );
   const [selectedGenders, setSelectedGenders] = useState([]);
   const [minAge, setMinAge] = useState(defaultAgeRange.min);
   const [maxAge, setMaxAge] = useState(defaultAgeRange.max);
@@ -154,33 +160,59 @@ function CohortForm() {
     </div>
     
     <div style={{ margin: '20px 0 20px 20px', maxWidth: '1200px', width: '95%' }}> 
-        {submitted && !demo ? (
-          <div
-            style={{
-              marginTop: '60px',
-              padding: '30px',             // increased from 20px
-              display: 'block',            // make it take full width
-              maxWidth: '800px',           // optional: set a max width
-              width: '100%',               // fill available space up to maxWidth
-              border: '1px solid #b6d4fe',
-              backgroundColor: '#e7f3ff',
-              borderRadius: '8px',         // slightly bigger rounded corners
-              color: '#084298',
-              boxSizing: 'border-box',     // ensures padding is included in width
-            }}
-          >
-            <h2>Submission received.</h2>
-            <p>The results will be sent to the email address provided when ready.</p>
-
-           <p>
-            If you have any issues, feedback, or comments, please email <br />
-            the Barts Life Sciences data science team at<br />  
-            <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">bartshealth.bls.cohortingtool@nhs.net</a>
-            </p>
-            <p>
-              You can now close this page.
-            </p>
-          </div>
+         {submitted && !demo ? (
+               <div
+                 style={{
+                   marginTop: '60px',
+                   padding: '30px',
+                   display: 'block',
+                   maxWidth: '800px',
+                   width: '100%',
+                   border: '1px solid #b6d4fe',
+                   backgroundColor: '#e7f3ff',
+                   borderRadius: '8px',
+                   color: '#084298',
+                   boxSizing: 'border-box',
+                 }}
+               >
+                 {isAllowedEmail ? (
+                   <>
+                     <h2>Submission received.</h2>
+             
+                     <p>
+                       The results will be sent to the email address provided when ready.
+                     </p>
+             
+                     <p>
+                       If you have any issues, feedback, or comments, please email <br />
+                       the Barts Life Sciences data science team at<br />
+                       <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">
+                         bartshealth.bls.cohortingtool@nhs.net
+                       </a>
+                     </p>
+             
+                     <p>
+                       You can now close this page.
+                     </p>
+                   </>
+                 ) : (
+                   <>
+                     <h2>Email address not eligible.</h2>
+             
+                     <p>
+                       Requests can be submitted using a QMUL or NHS email address.
+                     </p>
+             
+                     <p>
+                       To run a query or to get more information, please contact the
+                       Barts Life Sciences data science team at&nbsp;
+                       <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">
+                         bartshealth.bls.cohortingtool@nhs.net
+                       </a>
+                     </p>
+                   </>
+                 )}
+               </div>
           ) : (
               <div style={{ margin: '20px 0 20px 20px', maxWidth: '1200px', width: '95%' }}>
                   {demo ? (
@@ -200,7 +232,15 @@ function CohortForm() {
                     ) : (
                      <>
                         <h1>Cohort Builder</h1>
-                        <p>Use this form to create a cohort by defining the selection criteria. </p>
+                        <p
+                            style={{
+                              fontSize: "1.1rem",
+                              fontWeight: "600",
+                              marginBottom: "8px",
+                            }}
+                          >
+                           Supporting research cohort discovery and feasibility. </p>
+                        <p> Use this form to create a cohort by defining the selection criteria. </p>
                         <p>
                           If you have any issues, feedback, or comments, please email the Barts Life Sciences team at&nbsp;  
                           <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">bartshealth.bls.cohortingtool@nhs.net</a>

@@ -753,6 +753,59 @@ def process_cohort(cohort_definition: CohortDefinition):
                     data_and_time = datetime_title,
                     html_attachment_path=Path(filename)        
                 )
+                
+                
+                html_email_body_user = f"""
+                    <html>
+                      <body style="font-family: Arial, sans-serif; line-height: 1.5;">
+                        <p>Dear user,</p>
+                    
+                        <p>
+                          The patient cohorting request titled 
+                          <b>{cohort_definition.title}</b> (submitted by <b>{cohort_definition.email}</b> on {datetime_title})
+                          has <span style="color:red;"><b>failed</b></span> during processing.
+                        </p>
+                    
+                        <p>
+                          Please review the documentation of the tool before tring to submit another request.
+                        </p>
+                    
+                        <p>
+                          If you have any issues, feedback, or comments, please email the
+                          Barts Life Sciences data science team at 
+                          <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">
+                            bartshealth.bls.cohortingtool@nhs.net.<br />
+                          </a>
+                        </p>
+                        
+                        <p>
+                          <u>
+                          Please do not respond to this email as it is unmonitored.
+                          </u>
+                        </p>
+                    
+                        <p>
+                          Kind regards,<br />
+                          BLS data science team
+                        </p>
+                      </body>
+                    </html>
+                    """
+                
+                send_results_email(
+                    to_email=cohort_definition.email,
+                    subject="Cohort Submission: {cohort_definition.title} - Failed Request",
+                    html_body=html_email_body_user,
+                    # pdf_path=None, #pdf_path
+                    sender_email=settings.sender_email,
+                    smtp_server=settings.smtp_server,
+                    smtp_port=settings.smtp_port,
+                    app_password=settings.app_password,
+                    output_folder=output_folder,
+                    cohort_title = cohort_definition.title,
+                    data_and_time = datetime_title,
+                    html_attachment_path=Path(filename)        
+                )
              
                 print(f"Failed to send email: {e}")
     
@@ -796,6 +849,43 @@ def process_cohort(cohort_definition: CohortDefinition):
                   </body>
                 </html>
                 """
+                
+            html_email_body_user = f"""
+                <html>
+                  <body style="font-family: Arial, sans-serif; line-height: 1.5;">
+                    <p>Dear user,</p>
+                
+                    <p>
+                      The patient cohorting request titled 
+                      <b>{cohort_definition.title}</b> (submitted by <b>{cohort_definition.email}</b> on {datetime_title})
+                      has <span style="color:red;"><b>failed</b></span> during processing.
+                    </p>
+                
+                    <p>
+                      Please review the documentation of the tool before tring to submit another request.
+                    </p>
+                
+                    <p>
+                      If you have any issues, feedback, or comments, please email the
+                      Barts Life Sciences data science team at 
+                      <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">
+                        bartshealth.bls.cohortingtool@nhs.net.<br />
+                      </a>
+                    </p>
+                    
+                    <p>
+                      <u>
+                      Please do not respond to this email as it is unmonitored.
+                      </u>
+                    </p>
+                
+                    <p>
+                      Kind regards,<br />
+                      BLS data science team
+                    </p>
+                  </body>
+                </html>
+                """
             
             if settings.demo == 'yes':
                 send_results_email(
@@ -826,7 +916,22 @@ def process_cohort(cohort_definition: CohortDefinition):
                     cohort_title = cohort_definition.title,
                     data_and_time = datetime_title,
                     html_attachment_path=Path(filename)        
-                    )   
+                    )
+                
+                send_results_email(
+                    to_email=cohort_definition.email,
+                    subject="Cohort Submission: {cohort_definition.title} - Failed Request",
+                    html_body=html_email_body_user,
+                    # pdf_path=None, #pdf_path
+                    sender_email=settings.sender_email,
+                    smtp_server=settings.smtp_server,
+                    smtp_port=settings.smtp_port,
+                    app_password=settings.app_password,
+                    output_folder=output_folder,
+                    cohort_title = cohort_definition.title,
+                    data_and_time = datetime_title,
+                    html_attachment_path=Path(filename)        
+                )
             
             print("Email with errors sent")
          
