@@ -90,8 +90,8 @@ def get_snomed_display(code: str) -> str:
     try:
         snomed_display = client.search_snomed(code, "", 1)
         return snomed_display.get('entry', [{}])[0].get('resource', {}).get('display', 'Unknown')
-    except Exception as e:
-        print(f"Error fetching SNOMED display for {code}: {e}")
+    except Exception as e4:
+        print(f"Error fetching SNOMED display for {code}: {e4}")
         return 'Unknown'
     
 def fetch_from_db(query, params):
@@ -329,6 +329,11 @@ def process_cohort(cohort_definition: CohortDefinition):
 
         with open(filename_query, "w", encoding="utf-8") as f:
             f.write(final_query)
+            
+        # # ==========================
+        # # TEMPORARY EXCEPTION TEST
+        # # ==========================
+        # raise Exception("TEST: forced processing failure")
         
         # Run the query
         df_results = pd.DataFrame()
@@ -703,7 +708,13 @@ def process_cohort(cohort_definition: CohortDefinition):
                     html_attachment_path=Path(filename_results_html)        
                 )
                 print(f"Results email sent to {cohort_definition.email}")
-            except Exception as e:
+                
+                # # ==========================
+                # # TEMPORARY EXCEPTION TEST
+                # # ==========================
+                # raise Exception("TEST: forced processing failure")
+                
+            except Exception as e1:
                 
                 error_trace = traceback.format_exc()
                 
@@ -741,7 +752,7 @@ def process_cohort(cohort_definition: CohortDefinition):
                     
                 send_results_email(
                     to_email=settings.failure_email,
-                    subject="Cohort Submission: {cohort_definition.title} - Failed Request",
+                    subject="Cohort Submission: {cohort_definition.title} - Failed Request 2",
                     html_body=html_email_body,
                     # pdf_path=None, #pdf_path
                     sender_email=settings.sender_email,
@@ -771,7 +782,7 @@ def process_cohort(cohort_definition: CohortDefinition):
                         </p>
                     
                         <p>
-                          If you have any issues, feedback, or comments, please email the
+                          If you still have issues please email the
                           Barts Life Sciences data science team at 
                           <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">
                             bartshealth.bls.cohortingtool@nhs.net.<br />
@@ -794,7 +805,7 @@ def process_cohort(cohort_definition: CohortDefinition):
                 
                 send_results_email(
                     to_email=cohort_definition.email,
-                    subject="Cohort Submission: {cohort_definition.title} - Failed Request",
+                    subject="Cohort Submission: {cohort_definition.title} - Failed Request 2",
                     html_body=html_email_body_user,
                     # pdf_path=None, #pdf_path
                     sender_email=settings.sender_email,
@@ -807,13 +818,13 @@ def process_cohort(cohort_definition: CohortDefinition):
                     html_attachment_path=Path(filename)        
                 )
              
-                print(f"Failed to send email: {e}")
+                print(f"Failed to send email: {e1}")
     
             # Return JSON to frontend
             return results_payload
             pass
 
-    except Exception as e:
+    except Exception as e2:
         try:
             
             error_trace = traceback.format_exc()
@@ -866,7 +877,7 @@ def process_cohort(cohort_definition: CohortDefinition):
                     </p>
                 
                     <p>
-                      If you have any issues, feedback, or comments, please email the
+                      If you still have issues please email the
                       Barts Life Sciences data science team at 
                       <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">
                         bartshealth.bls.cohortingtool@nhs.net.<br />
@@ -890,7 +901,7 @@ def process_cohort(cohort_definition: CohortDefinition):
             if settings.demo == 'yes':
                 send_results_email(
                     to_email=settings.failure_email,
-                    subject="Cohort Submission: {cohort_definition.title} - Failed Request",
+                    subject="Cohort Submission: {cohort_definition.title} - Failed Request 1",
                     html_body=html_email_body,
                     # pdf_path=None, #pdf_path
                     smtp_server=settings.smtp_server,
@@ -905,7 +916,7 @@ def process_cohort(cohort_definition: CohortDefinition):
             if settings.demo == 'no':
                 send_results_email(
                     to_email=settings.failure_email,
-                    subject="Cohort Submission: {cohort_definition.title} - Failed Request",
+                    subject="Cohort Submission: {cohort_definition.title} - Failed Request 1",
                     html_body=html_email_body,
                     # pdf_path=None, #pdf_path
                     sender_email=settings.sender_email,
@@ -920,7 +931,7 @@ def process_cohort(cohort_definition: CohortDefinition):
                 
                 send_results_email(
                     to_email=cohort_definition.email,
-                    subject="Cohort Submission: {cohort_definition.title} - Failed Request",
+                    subject="Cohort Submission: {cohort_definition.title} - Failed Request 1",
                     html_body=html_email_body_user,
                     # pdf_path=None, #pdf_path
                     sender_email=settings.sender_email,
@@ -936,8 +947,8 @@ def process_cohort(cohort_definition: CohortDefinition):
             print("Email with errors sent")
          
           
-        except Exception as e:
-            print(f"Failed to send email: {e}")
+        except Exception as e3:
+            print(f"Failed to send email: {e3}")
 
 
 

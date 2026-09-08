@@ -204,7 +204,7 @@ function CohortForm() {
                      </p>
              
                      <p>
-                       To run a query or to get more information, please contact the
+                       To run a query with any other email address or to get more information, please contact the
                        Barts Life Sciences data science team at&nbsp;
                        <a href="mailto:bartshealth.bls.cohortingtool@nhs.net">
                          bartshealth.bls.cohortingtool@nhs.net
