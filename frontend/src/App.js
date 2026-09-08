@@ -78,6 +78,11 @@ function CohortForm() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     setSubmitted(true);
+    
+    if (!demo && !isAllowedEmail) {
+        return;
+    }
+
     setLoading(true);
 
     // Helper: keep only the main code if child codes not included
